@@ -1,0 +1,17 @@
+# 核心深度學習與模型架構
+torch>=2.0.0
+transformers>=4.40.0
+accelerate>=0.28.0
+datasets>=2.18.0
+
+# 旋轉矩陣與科學計算（第二階段 Hadamard / 正交變換核心）
+scipy>=1.10.0
+numpy>=1.24.0
+
+# 實驗配置、進度與數據可視化
+pyyaml>=6.0.0
+matplotlib>=3.7.0
+tqdm>=4.65.0
+
+# 單元測試與驗證
+pytest>=7.0.0

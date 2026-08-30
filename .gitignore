@@ -1,0 +1,75 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# PyTorch / Deep Learning checkpoints & models
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+*.engine
+*.ckpt
+
+# Model & Dataset caches
+.cache/
+hf_cache/
+datasets_cache/
+
+# Experiment results & logs
+results/raw_data/
+*.log
+runs/
+wandb/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# IDEs & Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

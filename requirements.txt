@@ -4,6 +4,10 @@ transformers>=4.40.0
 accelerate>=0.28.0
 datasets>=2.18.0
 
+# Tokenizer 與多模態 Processor 依賴
+protobuf>=3.20.0
+sentencepiece>=0.1.99
+
 # 旋轉矩陣與科學計算（第二階段 Hadamard / 正交變換核心）
 scipy>=1.10.0
 numpy>=1.24.0

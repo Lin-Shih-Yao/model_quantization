@@ -42,9 +42,11 @@ env/
 *.ckpt
 
 # Model & Dataset caches
+models/
 .cache/
 hf_cache/
 datasets_cache/
+.uv/
 
 # Experiment results & logs
 results/raw_data/

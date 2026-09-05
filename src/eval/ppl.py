@@ -8,12 +8,17 @@ strict Context Label Masking (-100), and immediate per-step MPS memory cleanup.
 """
 
 import argparse
+import gc
 import math
+import os
 import time
 import psutil
 import torch
 from datasets import load_dataset
 from tqdm import tqdm
+
+# 關鍵防護：禁止 Apple Silicon MPS 囤積快取顯存，杜絕 macOS Kernel Panic 黑屏重開機
+os.environ.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.0")
 
 from src.models import (
     load_pure_text_model_and_tokenizer,
@@ -95,12 +100,20 @@ def evaluate_ppl(
         step_count += 1
         progress_bar.update(1)
 
-        # 關鍵優化：每一步立即釋放暫存並清理 GPU 快取，杜絕記憶體堆積
+        # 關鍵優化：每一步立即釋放暫存並強制清理 GPU 快取與垃圾回收，杜絕記憶體堆積
         del outputs, input_ids, target_ids
         if device == "mps":
             torch.mps.empty_cache()
         elif device == "cuda":
             torch.cuda.empty_cache()
+        gc.collect()
+
+        # 關鍵防護：主動記憶體安全熔斷機制 (Safety Circuit Breaker)
+        # 若系統 RAM 使用率超過 85%，主動安全中斷評估並結算當前分數，絕對不讓 Mac 觸發 Kernel Panic 黑屏重開機！
+        mem_percent = psutil.virtual_memory().percent
+        if mem_percent > 85.0:
+            print(f"\n⚠️ [安全熔斷防護觸發] 系統記憶體使用率達 {mem_percent:.1f}% (>85%)，為保護 Mac 硬體避免黑屏，主動安全結束評估！")
+            break
 
         if end_loc == seq_len or (max_steps and step_count >= max_steps):
             break

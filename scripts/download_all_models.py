@@ -21,7 +21,7 @@ TARGET_MODELS = [
 ]
 
 
-def download_single_model(model_id: str, base_dir: str = "./models"):
+def download_single_model(model_id: str, base_dir: str = "./models", token: str | None = None):
     short_name = model_id.replace("/", "_")
     target_dir = os.path.abspath(os.path.join(base_dir, short_name))
 
@@ -38,6 +38,7 @@ def download_single_model(model_id: str, base_dir: str = "./models"):
             repo_id=model_id,
             local_dir=target_dir,
             local_dir_use_symlinks=False,
+            token=token,
         )
         print(f"✅ {model_id} 下載完成！")
         return True
@@ -45,7 +46,7 @@ def download_single_model(model_id: str, base_dir: str = "./models"):
         print(f"❌ {model_id} 下載失敗: {e}")
         if "401" in str(e) or "403" in str(e) or "gated" in str(e).lower():
             print("   👉 提示：此模型需要 Hugging Face 存取權限。")
-            print("   請先至 Hugging Face 網頁同意授權，並在終端機執行 `huggingface-cli login`。")
+            print("   請先至 Hugging Face 網頁同意授權，並在終端機執行 `huggingface-cli login` 或加上 `--token hf_xxx`。")
         return False
 
 
@@ -63,7 +64,14 @@ def main():
         default="./models",
         help="Base directory to save models",
     )
+    parser.add_argument(
+        "--token",
+        type=str,
+        default=None,
+        help="HuggingFace Access Token (optional if already logged in)",
+    )
     args = parser.parse_args()
+    token = args.token or os.environ.get("HF_TOKEN")
 
     os.makedirs(args.save_base_dir, exist_ok=True)
 
@@ -72,13 +80,14 @@ def main():
     print(f"📋 待下載清單 ({len(args.models)} 個模型):")
     for idx, m in enumerate(args.models, 1):
         print(f"   {idx}. {m}")
+    print(f"🔑 Token 提供狀態 : {'已提供' if token else '未提供 (使用本機登入快取)'}")
     print("=" * 65)
 
     success_count = 0
     failed_models = []
 
     for model_id in args.models:
-        success = download_single_model(model_id, args.save_base_dir)
+        success = download_single_model(model_id, args.save_base_dir, token=token)
         if success:
             success_count += 1
         else:

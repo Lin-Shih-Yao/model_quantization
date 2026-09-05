@@ -10,17 +10,86 @@ import sys
 import time
 import psutil
 import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Ensure repository root is in python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.models import (
-    load_pure_text_model_and_tokenizer,
-    get_optimal_device,
-    resolve_model_path,
-    generate_response,
-)
+import time
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
+def get_optimal_device() -> str:
+    if torch.cuda.is_available():
+        return "cuda"
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        return "mps"
+    return "cpu"
+
+def resolve_model_path(model_id: str) -> str:
+    if os.path.exists(model_id):
+        return model_id
+    drive_base = "/content/drive/MyDrive/models"
+    clean_name = model_id.replace("/", "_")
+    candidates = [
+        os.path.join(drive_base, model_id.split("/")[-1]),
+        os.path.join(drive_base, clean_name),
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return c
+    return model_id
+
+def load_pure_text_model_and_tokenizer(model_path: str, device: str, torch_dtype=torch.bfloat16):
+    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    if device == "cuda" and torch_dtype == torch.bfloat16 and not torch.cuda.is_bf16_supported():
+        torch_dtype = torch.float16
+
+    model = AutoModelForCausalLM.from_pretrained(
+        model_path,
+        torch_dtype=torch_dtype,
+        device_map="auto" if device == "cuda" else None,
+        trust_remote_code=True,
+    )
+    if device != "cuda" or model.device.type == "cpu":
+        model = model.to(device)
+    model.eval()
+    return model, tokenizer
+
+def generate_response(model, tokenizer, prompt: str, device: str, max_new_tokens: int = 50) -> dict:
+    inputs = tokenizer(prompt, return_tensors="pt")
+    inputs = {k: v.to(model.device) for k, v in inputs.items()}
+    input_tokens = inputs["input_ids"].shape[1]
+
+    if device == "cuda":
+        torch.cuda.synchronize()
+
+    start_time = time.time()
+    with torch.no_grad():
+        output_ids = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            pad_token_id=tokenizer.pad_token_id,
+        )
+
+    if device == "cuda":
+        torch.cuda.synchronize()
+
+    latency_sec = time.time() - start_time
+    output_tokens = output_ids.shape[1] - input_tokens
+    response_text = tokenizer.decode(output_ids[0][input_tokens:], skip_special_tokens=True)
+    tokens_per_sec = output_tokens / latency_sec if latency_sec > 0 else 0.0
+
+    return {
+        "response": response_text.strip(),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "latency_sec": latency_sec,
+        "tokens_per_sec": tokens_per_sec,
+    }
 
 def demo_inference(
     model_id: str = "Qwen/Qwen3.5-2B",

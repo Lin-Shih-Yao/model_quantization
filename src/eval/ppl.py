@@ -6,7 +6,6 @@ Reference: https://huggingface.co/docs/transformers/perplexity
 Evaluates models on standard WikiText-2 test set with Apple Silicon MPS GPU acceleration,
 strict Context Label Masking (-100), and immediate per-step MPS memory cleanup.
 """
-
 import argparse
 import gc
 import math
@@ -26,7 +25,6 @@ from src.models import (
     resolve_model_path,
 )
 
-
 def evaluate_ppl(
     model,
     tokenizer,
@@ -34,7 +32,7 @@ def evaluate_ppl(
     max_length: int = 2048,
     stride: int = 512,
     max_steps: int | None = None,
-    dataset_name: str = "wikitext",
+    dataset_name: str = "Salesforce/wikitext",
     dataset_config: str = "wikitext-2-raw-v1",
     dataset_split: str = "test",
 ) -> dict:

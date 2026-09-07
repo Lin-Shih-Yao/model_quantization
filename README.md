@@ -25,9 +25,9 @@
 
 | 模型系列 | 目標型號 | 架構特色 | 參數量 |
 | :--- | :--- | :--- | :---: |
+| **Llama** (Meta) | [meta-llama/Llama-3.2-1B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct)<br>[meta-llama/Llama-3.2-3B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct) | 128k 超長窗口、標準 RMSNorm、GQA、學術界主流黃金基線 | 1.2B / 3.2B |
 | **Qwen** (Alibaba) | [Qwen/Qwen3.5-2B](https://huggingface.co/Qwen/Qwen3.5-2B)<br>[Qwen/Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) | SwiGLU 激活、Grouped Query Attention (GQA)、RoPE | 2.2B / 4.5B |
 | **Gemma** (Google) | [google/gemma-4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it)<br>[google/gemma-4-E4B-it](https://huggingface.co/google/gemma-4-E4B-it) | GeGLU 激活、Logit Soft-Capping、滑動窗口注意力 | 5.1B / 7.5B |
-| **Llama** (Meta) | [meta-llama/Llama-3.2-1B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct)<br>[meta-llama/Llama-3.2-3B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct) | 128k 大詞表、標準 RMSNorm、GQA、學術界主流 Baseline | 1.2B / 3.2B |
 
 ---
 
@@ -35,23 +35,29 @@
 
 ```
 model_quantization/
-├── README.md                  # 專案說明文件
+├── README.md                  # 專案說明文件與最新實測成果
 ├── requirements.txt           # 核心依賴清單
 ├── .gitignore                 # Git 忽略配置 (自動排除 models/ 龐大權重)
 ├── src/
 │   ├── __init__.py
-│   ├── quantization/          # 量化核心模組 (Uniform Quantizer, QuantLinear, FP8)
-│   │   └── __init__.py
-│   ├── models/                # 模型載入與架構替換 (Model Patcher, Layer Slicer)
-│   │   └── __init__.py
-│   └── eval/                  # 評估 Pipeline (PPL 計算, Profiler, Latency)
+│   ├── models/                # 模型載入、推論引擎與架構擴充
+│   │   ├── __init__.py
+│   │   ├── loader.py          # 模型與 Tokenizer 統一載入器、裝置偵測與路徑解析
+│   │   └── inference.py       # 自適應 Chat Template 純文字高效推論引擎
+│   ├── eval/                  # 評估 Pipeline (PPL 計算, Profiler, Latency)
+│   │   ├── __init__.py
+│   │   ├── ppl.py             # 官方標準 Strided Sliding Window PPL 核心評估模組
+│   │   └── profile_matrix.py  # 激活特徵矩陣與離群尖刺診斷分析
+│   └── quantization/          # 量化核心模組 (Uniform Quantizer, QuantLinear, FP8, SpinQuant)
 │       └── __init__.py
 ├── notebooks/                 # 雲端 Jupyter 筆記本 (Google Colab 專用)
 │   └── colab_quantization_benchmark.ipynb # 一鍵雲端評估與視覺化 Notebook
-├── scripts/                   # 執行與實驗 CLI 腳本
+├── scripts/                   # CLI 捷徑與下載工具
 │   ├── demo_inference.py      # 純文字輕量化推論測試腳本
-│   ├── download_model.py      # 單一模型權重下載工具
-│   └── download_all_models.py  # 批次模型下載工具
+│   ├── download_model.py      # 單一模型權重下載工具 (支援 HF Token)
+│   ├── download_all_models.py  # 批次模型下載工具
+│   ├── evaluate_ppl.py        # PPL 評估 CLI 捷徑
+│   └── profile_matrix.py      # 激活矩陣診斷 CLI 捷徑
 └── tests/                     # 單元測試 (驗證量化數值誤差與正交性)
     └── __init__.py
 ```
@@ -61,7 +67,7 @@ model_quantization/
 ## 🚀 快速開始 (Quickstart)
 
 ### 1. 環境建置
-本專案已全面適配 **Python 3.11+** 與 **Apple Silicon MPS (Metal Performance Shaders)** 原生硬體加速：
+本專案已全面適配 **Python 3.11+**，支援 **Apple Silicon MPS (Metal Performance Shaders)** 本地原生加速與 **NVIDIA CUDA (Google Colab)** 雲端算力：
 
 ```bash
 # 建立並啟用虛擬環境
@@ -72,36 +78,39 @@ pip install -r requirements.txt
 ```
 
 ### 2. 模型權重下載
-支援將 Hugging Face 權重直接下載至本地 `./models/` 目錄：
+支援將 Hugging Face 權重直接下載至本地 `./models/` 目錄（Llama 3.2 等受保護模型支援 `--token` 參數）：
 
 ```bash
-# 下載單一指定模型
-python scripts/download_model.py --model_id Qwen/Qwen3.5-2B
+# 下載單一指定模型 (若為 Gated Model 可附帶 --token)
+python scripts/download_model.py --model_id meta-llama/Llama-3.2-1B-Instruct
 
 # 或批次下載所有目標模型
 python scripts/download_all_models.py
 ```
 
 ### 3. 純文字高效推論測試
-專案提供專為語言模型量化設計的 `demo_inference.py`，支援自動偵測本地權重與**「非文字模組自動剝離（Text-Only Mode）」**，能主動釋放多模態視覺與語音編碼器，使記憶體佔用降至最低，避免設備發熱：
+專案提供專為語言模型設計的 `demo_inference.py`，支援自動偵測本地權重與**「非文字模組自動剝離（Text-Only Mode）」**，能主動釋放多模態視覺與語音編碼器，使記憶體佔用降至最低，避免設備發熱：
 
 ```bash
+# 測試 Llama 3.2 1B 純文字推論
+python scripts/demo_inference.py --model_id ./models/meta-llama_Llama-3.2-1B-Instruct --max_new_tokens 50
+
+# 測試 Llama 3.2 3B 純文字推論
+python scripts/demo_inference.py --model_id ./models/meta-llama_Llama-3.2-3B-Instruct --max_new_tokens 50
+
 # 測試 Qwen 3.5 2B 純文字推論
 python scripts/demo_inference.py --model_id ./models/Qwen_Qwen3.5-2B --max_new_tokens 50
 
 # 測試 Gemma 4 E2B 純文字推論
 python scripts/demo_inference.py --model_id ./models/google_gemma-4-E2B-it --max_new_tokens 50
-
-# 測試 Qwen 3.5 4B 純文字推論
-python scripts/demo_inference.py --model_id ./models/Qwen_Qwen3.5-4B --max_new_tokens 50
 ```
 
 ### 4. 雲端 GPU 極速評估 (Google Colab)
-若本地記憶體有限（如跑 Gemma 4 E2B 或 Qwen 3.5 4B 的長窗口注意力容易 OOM），建議直接使用專案內的 Colab 雲端筆記本：
+若本地記憶體有限（如跑大型模型長窗口注意力容易 OOM），建議直接使用專案內的 Colab 雲端筆記本：
 - **筆記本檔案**：[`notebooks/colab_quantization_benchmark.ipynb`](notebooks/colab_quantization_benchmark.ipynb)
 - **核心優勢**：
   - 支援免費 T4 (16GB 獨立 VRAM)，徹底擺脫本地 Unified Memory 黑屏困擾。
-  - 支援完整 2048 官方標準窗口與全量 WikiText-2 PPL 評估。
+  - 支援完整 2048 官方標準窗口與全量 578 步 WikiText-2 PPL 評估。
   - 內建 Matplotlib 各層激活峰均比（PAR）可視化圖表與 Google Drive 自動備份。
 
 ---
@@ -110,35 +119,50 @@ python scripts/demo_inference.py --model_id ./models/Qwen_Qwen3.5-4B --max_new_t
 
 在未量化原版（BF16 浮點精度）下，本機實測推論效能如下：
 
-| 模型名稱 | 文字參數量 | 首次載入時間 | 生成速度 (Throughput) | 實體記憶體佔用 |
-| :--- | :---: | :---: | :---: | :---: |
-| **Llama 3.2 1B** | 1.24 B | **~ 3.0 s** | **15.49 tokens/s** | 🟢 **~ 2.5 GB (極速流暢)** |
-| **Llama 3.2 3B** | 3.21 B | ~ 14.6 s | **7.11 tokens/s** | 🟢 **~ 6.5 GB (流暢高品質)** |
-| **Qwen 3.5 2B** | 2.21 B | ~ 22.5 s | **7.49 tokens/s** | 🟢 ~ 4.3 GB (流暢) |
-| **Gemma 4 E2B** | 5.10 B | ~ 57.7 s | **4.28 tokens/s** | 🟢 ~ 4.5 GB (流暢) |
-| **Qwen 3.5 4B** | 4.54 B | ~ 26.8 s | **3.99 tokens/s** | 🟢 ~ 8.5 GB (流暢) |
+| 模型名稱 | 文字參數量 | 首次載入時間 | 生成速度 (Throughput) | 實體記憶體佔用 | 體驗評價 |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| 🏆 **Llama 3.2 1B** | 1.24 B | **~ 3.0 s** | **`15.49 tokens/s`** | 🟢 **~ 2.5 GB** | **極速、超輕量** |
+| **Llama 3.2 3B** | 3.21 B | ~ 14.6 s | **`7.11 tokens/s`** | 🟢 **~ 6.5 GB** | **流暢、高品質語意** |
+| **Qwen 3.5 2B** | 2.21 B | ~ 22.5 s | **`7.49 tokens/s`** | 🟢 ~ 4.3 GB | 流暢 |
+| **Gemma 4 E2B** | 5.10 B | ~ 57.7 s | **`4.28 tokens/s`** | 🟢 ~ 4.5 GB | 流暢 |
+| **Qwen 3.5 4B** | 4.54 B | ~ 26.8 s | **`3.99 tokens/s`** | 🟢 ~ 8.5 GB | 偏吃重 |
 
 ---
 
 ## 🧪 官方基準評估與學術對齊 (Baseline Evaluation & Profiling)
 
 ### 1. WikiText-2 PPL 精度基準 (Perplexity Baseline)
-本專案嚴格遵循 Hugging Face 官方標準滑動分塊規範（2048 Context Length, 40-chunk 評估），在 Apple Silicon (Mac M3 MPS) 實測模型在未量化（BF16）下的黃金基準分數，並與國際頂級量化論文（BASE-Q, HeRo-Q 等）數據進行嚴格交叉對齊：
+本專案嚴格遵循 Hugging Face 官方標準滑動分塊規範（2048 Context Length, 512 Stride, -100 Context Masking），在 Apple Silicon (Mac M3 MPS) 與 Google Colab (NVIDIA CUDA GPU) 實測模型在未量化（BF16）下的黃金基準分數，並與國際頂級量化論文（BASE-Q, HeRo-Q 等）數據進行嚴格交叉對齊：
 
-| 模型型號 | 實體參數量 | 國際論文 / 官方技術報告 | 本專案實測 PPL (Mac M3) | 評估耗時 | 對齊結論 |
+| 模型型號 | 實體參數量 | 國際論文 / 官方技術報告 | 本專案實測 PPL (Mac / Colab) | 評估規格與耗時 | 對齊結論 |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| **Llama 3.2 1B** | 1.24 B | `11.0 ~ 12.0` (Instruct) | 🏆 **`11.29`** | **~ 1.5 min (90s)** | 🎯 **極速收斂！以僅 1.2B 參數量媲美 2B 等級困惑度！** |
+| 🥇 **Llama 3.2 3B** | 3.21 B | `9.5 ~ 10.5` (預期) | 🏆 **`9.54`** | Mac 40 步 (~ 3.7 min, 99.1 t/s) | 🎯 **強勢突破 10.0 大關！達到 3B 端側頂級語言理解水準！** |
+| 🥈 **Qwen 3.5 2B** | 2.21 B | *理論區間 `10.8 ~ 11.5`* | 🏆 **`10.66`** *(Colab 全量)*<br>🏆 **`11.20`** *(Mac 40 步)* | **Colab 全量 578 步 (~ 39.3 min, 126.0 t/s)**<br>Mac 40 步 (~ 5.8 min, 63.2 t/s) | 🎯 **全量評估突破理論上限！以 10.66 逆襲前代 2.5 3B 模型！** |
+| 🥉 **Llama 3.2 1B** | 1.24 B | `11.0 ~ 12.0` (Instruct) | 🏆 **`11.40`** *(Colab 全量)*<br>🏆 **`11.29`** *(Mac 40 步)* | **Colab 全量 562 步 (~ 26.8 min, 179.6 t/s)**<br>Mac 40 步 (~ 1.5 min, 244.0 t/s) | 🎯 **極速收斂！以僅 1.2B 參數量精準對齊官方與論文基準，媲美 2B 等級困惑度！** |
+| **Qwen 2.5 3B** | 3.09 B | `10.72` (FP16 基線) | — | — | 學術論文參考 (Qwen 3.5 2B 已實測超越此基準) |
 | **Qwen 2.5 1.5B** | 1.54 B | `15.69` (BF16 基線) | — | — | 學術論文參考 |
-| **Qwen 3.5 2B** | 2.21 B | *理論區間 `10.8 ~ 11.5`* | 🏆 **`11.20`** | ~ 5.8 min | 🎯 **完美命中！座落在 1.5B 與 3B 指數遞減曲線黃金點！** |
-| **Llama 3.2 3B** | 3.21 B | `9.5 ~ 10.5` (預期) | 🏆 **`9.54`** | **~ 3.7 min (222s)** | 🎯 **強勢突破 10.0 大關！達到 3B 端側頂級語言理解水準！** |
-| **Qwen 2.5 3B** | 3.09 B | `10.72` (FP16 基線) | — | — | 學術論文參考 |
 | **Gemma 4 E2B** | 5.10 B | — | *待測評* | — | 待測評 |
 | **Qwen 3.5 4B** | 4.54 B | — | *待測評* | — | 待測評 |
 
+> 💡 **全量評估亮點 (Colab Cloud Benchmark)**：  
+> - **Llama 3.2 1B**：在 Google Colab (CUDA, BF16) 上執行 **562 步全量 WikiText-2（共 288,937 tokens）** 深度評估，耗時 1608 秒（~26.8 分鐘，吞吐量 179.58 tokens/s），最終測得困惑度為 **`11.4027`**，精準落在官方技術報告 `11.0 ~ 12.0` 區間！
+> - **Qwen 3.5 2B**：在 Google Colab (CUDA, BF16) 上執行 **578 步全量 WikiText-2（共 297,053 tokens）** 深度評估，耗時 2357 秒（~39.3 分鐘，吞吐量 126.01 tokens/s），最終測得困惑度為 **`10.6631`**！相較 40 步快速模式（`11.20`）更進一步收斂，甚至勝過前代參數量更大的 Qwen 2.5 3B 論文基線（`10.72`）！
+
+#### 執行標準 PPL 評估指令
+專案核心評估腳本位於 `src/eval/ppl.py`，支援多種規格調度：
+
 ```bash
-# 執行標準 WikiText-2 PPL 評估 (支援 Qwen 3.5 / Gemma 4)
-python scripts/evaluate_ppl.py --model_id ./models/Qwen_Qwen3.5-2B
+# 1. 執行 40 步快速驗證模式 (建議初次篩選，約 1~5 分鐘)
+python src/eval/ppl.py --model_id ./models/meta-llama_Llama-3.2-1B-Instruct --dataset wikitext-2-raw-v1 --max_length 2048 --stride 512 --max_steps 40
+
+# 2. 執行 Llama 3.2 3B 快速驗證
+python src/eval/ppl.py --model_id ./models/meta-llama_Llama-3.2-3B-Instruct --dataset wikitext-2-raw-v1 --max_length 2048 --stride 512 --max_steps 40
+
+# 3. 執行全量完整資料集評估 (不帶 --max_steps 即評估全部 578 步，約 30~40 分鐘)
+python src/eval/ppl.py --model_id ./models/Qwen_Qwen3.5-2B --dataset wikitext-2-raw-v1 --max_length 2048 --stride 512
 ```
+
+---
 
 ### 2. 量化前激活值離群矩陣診斷 (Activation Outlier Profiling)
 在正式量化前，透過 PyTorch Forward Hook 攔截神經網路各層特徵矩陣，分析通道離群尖刺（Outlier Spikes）與峰均比（Peak-to-Average Ratio, PAR），為後續量化策略提供理論依據：
@@ -153,14 +177,13 @@ python scripts/evaluate_ppl.py --model_id ./models/Qwen_Qwen3.5-2B
 
 ```bash
 # 執行激活矩陣體檢
-python scripts/profile_matrix.py --model_id ./models/Qwen_Qwen3.5-2B
+python src/eval/profile_matrix.py --model_id ./models/Qwen_Qwen3.5-2B --num_tokens 1024
 ```
 
 ---
 
 ## 📚 核心依賴一覽
-- **深度學習與模型**：`torch >= 2.13`, `transformers >= 5.x`, `accelerate`, `datasets`
-- **科學計算與旋轉變換**：`scipy`, `numpy`
-- **多模態與輔助處理**：`torchvision`, `protobuf`, `sentencepiece`
-- **分析與測試**：`matplotlib`, `tqdm`, `pytest`, `pyyaml`
-
+- **深度學習與模型**：`torch >= 2.4.0`, `transformers >= 4.45.0`, `accelerate >= 0.28.0`, `datasets >= 2.18.0`
+- **科學計算與旋轉變換**：`scipy >= 1.10.0`, `numpy >= 1.24.0`
+- **多模態與輔助處理**：`torchvision`, `protobuf >= 3.20.0`, `sentencepiece >= 0.1.99`
+- **分析與測試**：`matplotlib >= 3.7.0`, `tqdm >= 4.65.0`, `pytest >= 7.0.0`, `pyyaml >= 6.0.0`

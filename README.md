@@ -27,7 +27,7 @@
 | :--- | :--- | :--- | :---: |
 | **Llama** (Meta) | [meta-llama/Llama-3.2-1B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct)<br>[meta-llama/Llama-3.2-3B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct) | 128k 超長窗口、標準 RMSNorm、GQA、學術界主流黃金基線 | 1.2B / 3.2B |
 | **Qwen** (Alibaba) | [Qwen/Qwen3.5-2B](https://huggingface.co/Qwen/Qwen3.5-2B)<br>[Qwen/Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) | SwiGLU 激活、Grouped Query Attention (GQA)、RoPE | 2.2B / 4.5B |
-| **Gemma** (Google) | [google/gemma-4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it)<br>[google/gemma-4-E4B-it](https://huggingface.co/google/gemma-4-E4B-it) | GeGLU 激活、Logit Soft-Capping、滑動窗口注意力 | 5.1B / 7.5B |
+| **Gemma** (Google) | [google/gemma-2-2b-it](https://huggingface.co/google/gemma-2-2b-it)<br>[google/gemma-4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it) | 純文字自回歸 / 多模態、GeGLU 激活、Logit Soft-Capping、滑動窗口注意力 | 2.6B / 5.1B |
 
 ---
 
@@ -136,17 +136,21 @@ python scripts/demo_inference.py --model_id ./models/google_gemma-4-E2B-it --max
 
 | 模型型號 | 實體參數量 | 國際論文 / 官方技術報告 | 本專案實測 PPL (Mac / Colab) | 評估規格與耗時 | 對齊結論 |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| 🥇 **Llama 3.2 3B** | 3.21 B | `9.5 ~ 10.5` (預期) | 🏆 **`9.54`** | Mac 40 步 (~ 3.7 min, 99.1 t/s) | 🎯 **強勢突破 10.0 大關！達到 3B 端側頂級語言理解水準！** |
+| 👑 **Qwen 3.5 4B** | 4.21 B | `8.0 ~ 8.8` (預期) | 🏆 **`8.25`** *(Colab 全量)* | **Colab 全量 578 步 (~ 84.2 min, 58.8 t/s)** | 🎯 **刷新紀錄！全量實測壓至 8.2480，展現 4B 端側旗艦級超強語言理解水準！** |
+| 🥇 **Llama 3.2 3B** | 3.21 B | `9.5 ~ 10.5` (預期) | 🏆 **`9.52`** *(Colab 全量)*<br>🏆 **`9.54`** *(Mac 40 步)* | **Colab 全量 562 步 (~ 61.5 min, 78.3 t/s)**<br>Mac 40 步 (~ 3.7 min, 99.1 t/s) | 🎯 **強勢突破 10.0 大關！全量實測壓至 9.5177，展現 3B 端側頂級語言理解水準！** |
 | 🥈 **Qwen 3.5 2B** | 2.21 B | *理論區間 `10.8 ~ 11.5`* | 🏆 **`10.66`** *(Colab 全量)*<br>🏆 **`11.20`** *(Mac 40 步)* | **Colab 全量 578 步 (~ 39.3 min, 126.0 t/s)**<br>Mac 40 步 (~ 5.8 min, 63.2 t/s) | 🎯 **全量評估突破理論上限！以 10.66 逆襲前代 2.5 3B 模型！** |
 | 🥉 **Llama 3.2 1B** | 1.24 B | `11.0 ~ 12.0` (Instruct) | 🏆 **`11.40`** *(Colab 全量)*<br>🏆 **`11.29`** *(Mac 40 步)* | **Colab 全量 562 步 (~ 26.8 min, 179.6 t/s)**<br>Mac 40 步 (~ 1.5 min, 244.0 t/s) | 🎯 **極速收斂！以僅 1.2B 參數量精準對齊官方與論文基準，媲美 2B 等級困惑度！** |
+| 🌟 **Gemma 2 2B** | 2.61 B | `11.5 ~ 12.5` (Instruct) | 🏆 **`11.83`** *(Colab 全量)* | **Colab 全量 564 步 (~ 25.5 min, 188.9 t/s)** | 🎯 **純文字架構正常收斂！實測 11.8346，精準對齊學術論文與官方基準！** |
 | **Qwen 2.5 3B** | 3.09 B | `10.72` (FP16 基線) | — | — | 學術論文參考 (Qwen 3.5 2B 已實測超越此基準) |
 | **Qwen 2.5 1.5B** | 1.54 B | `15.69` (BF16 基線) | — | — | 學術論文參考 |
-| **Gemma 4 E2B** | 5.10 B | — | *待測評* | — | 待測評 |
-| **Qwen 3.5 4B** | 4.54 B | — | *待測評* | — | 待測評 |
+| **Gemma 4 E2B** | 5.10 B | — | *12707.84 (多模態架構失配)* | Colab 全量 (多模態架構) | ⚠️ 因原生多模態架構與 PLE 詞表，純文字標準 PPL 評估不適用 |
 
 > 💡 **全量評估亮點 (Colab Cloud Benchmark)**：  
-> - **Llama 3.2 1B**：在 Google Colab (CUDA, BF16) 上執行 **562 步全量 WikiText-2（共 288,937 tokens）** 深度評估，耗時 1608 秒（~26.8 分鐘，吞吐量 179.58 tokens/s），最終測得困惑度為 **`11.4027`**，精準落在官方技術報告 `11.0 ~ 12.0` 區間！
+> - **Qwen 3.5 4B**：在 Google Colab (CUDA, BF16) 上執行 **578 步全量 WikiText-2（共 297,053 tokens）** 深度評估，耗時 5051.78 秒（~84.2 分鐘，吞吐量 58.80 tokens/s），最終測得困惑度為 **`8.2480`**！大幅刷新專案全量測試最佳紀錄，以壓倒性優勢展現 4B 旗艦級語意連貫度！
+> - **Llama 3.2 3B**：在 Google Colab (CUDA, BF16) 上執行 **562 步全量 WikiText-2（共 288,937 tokens）** 深度評估，耗時 3688 秒（~61.5 分鐘，吞吐量 78.33 tokens/s），最終測得困惑度為 **`9.5177`**！全量實測更進一步收斂，展現 3B 級別最強基線！
 > - **Qwen 3.5 2B**：在 Google Colab (CUDA, BF16) 上執行 **578 步全量 WikiText-2（共 297,053 tokens）** 深度評估，耗時 2357 秒（~39.3 分鐘，吞吐量 126.01 tokens/s），最終測得困惑度為 **`10.6631`**！相較 40 步快速模式（`11.20`）更進一步收斂，甚至勝過前代參數量更大的 Qwen 2.5 3B 論文基線（`10.72`）！
+> - **Llama 3.2 1B**：在 Google Colab (CUDA, BF16) 上執行 **562 步全量 WikiText-2（共 288,937 tokens）** 深度評估，耗時 1608 秒（~26.8 分鐘，吞吐量 179.58 tokens/s），最終測得困惑度為 **`11.4027`**，精準落在官方技術報告 `11.0 ~ 12.0` 區間！
+> - **Gemma 2 2B**：在 Google Colab (CUDA, BF16) 上執行 **564 步全量 WikiText-2（共 288,894 tokens，Context 1024 / Stride 512）** 深度評估，耗時 1529.33 秒（~25.5 分鐘，吞吐量 188.90 tokens/s），最終測得困惑度為 **`11.8346`**！以純文字架構完美收斂，順利打通 Google Gemma 體系的量化評估基線！
 
 #### 執行標準 PPL 評估指令
 專案核心評估腳本位於 `src/eval/ppl.py`，支援多種規格調度：

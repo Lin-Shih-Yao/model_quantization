@@ -50,6 +50,8 @@ datasets_cache/
 
 # Experiment results & logs
 results/raw_data/
+calibration_results/
+.env*
 *.log
 runs/
 wandb/

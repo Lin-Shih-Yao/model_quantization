@@ -50,6 +50,7 @@ datasets_cache/
 
 # Experiment results & logs
 results/raw_data/
+calibration/
 calibration_results/
 .env*
 *.log

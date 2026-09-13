@@ -174,6 +174,13 @@ def parse_args():
         choices=["bfloat16", "float16", "float32"],
         help="Model precision dtype (default: bfloat16)",
     )
+    parser.add_argument(
+        "--quant_method",
+        type=str,
+        default="none",
+        choices=["none", "w8a16"],
+        help="Quantization method to apply before evaluation (default: none for unquantized model)",
+    )
     return parser.parse_args()
 
 
@@ -191,6 +198,7 @@ def main():
     print("=" * 68)
     print("🧪 Official Hugging Face Strided Sliding Window Perplexity Benchmark")
     print(f"  • Target Model : {resolved_path}")
+    print(f"  • Quant Method : {args.quant_method.upper()}")
     print(f"  • Device GPU   : {device.upper()} (Apple Silicon MPS / CUDA)")
     print(f"  • Precision    : {args.dtype}")
     print(f"  • Dataset      : {args.dataset}")
@@ -214,6 +222,12 @@ def main():
     print(f"  • 文字參數量 : {num_params:.2f} B ({num_params * 1000:.0f} M)")
     print(f"  • 實體記憶體佔用 : ~{ram_gb:.2f} GB RAM")
 
+    # 若指定量化方法，在評估前無縫套用量化層替換
+    if args.quant_method == "w8a16":
+        from src.quantization import quantize_model_w8a16
+        print("\n⚙️ 正在套用 W8A16 核心層 INT8 量化...")
+        model = quantize_model_w8a16(model)
+
     # 執行官方標準 Strided Sliding Window PPL 評估
     results = evaluate_ppl(
         model,
@@ -225,7 +239,10 @@ def main():
     )
 
     print("\n" + "=" * 68)
-    print("📊 官方 WikiText-2 基準評估結果 (Official Benchmark Results)：")
+    if args.quant_method != "none":
+        print(f"📊 官方 WikiText-2 基準評估結果 [{args.quant_method.upper()} 量化]：")
+    else:
+        print("📊 官方 WikiText-2 基準評估結果 (Official Benchmark Results)：")
     print("-" * 68)
     print(f"  🏆 WikiText-2 PPL (困惑度) : {results['ppl']:.4f} (越低越好)")
     print(f"  ⚡ 評估總耗時              : {results['elapsed_sec']:.2f} 秒")

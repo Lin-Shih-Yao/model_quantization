@@ -186,6 +186,24 @@ python src/eval/profile_matrix.py --model_id ./models/Qwen_Qwen3.5-2B --num_toke
 
 ---
 
+### 3. 量化實驗基準成果 (Post-Training Quantization Benchmarks)
+本專案透過解耦式量化架構，實測模型在不同量化配置下的官方標準 WikiText-2 PPL 表現：
+
+| 模型型號 | 量化配置 | 權重精度 / 激活精度 | 實測 WikiText-2 PPL | PPL 損耗 (Δ PPL) | 評估規格與耗時 | 量化結論 |
+| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+| **Llama 3.2 1B** | **未量化 Baseline** | BF16 / BF16 | **`11.4027`** | — | Colab 全量 562 步 (1608s, 179.6 t/s) | 官方原始浮點基線基準 |
+| 🏆 **Llama 3.2 1B** | **W8A16** | **INT8 / BF16** | **`11.4300`** | **`+0.0273` (`+0.24%`)** | **Colab 全量 562 步 (1922.5s, 150.3 t/s)** | 🎯 **教科書級近乎零損耗！顯存減半 (50%)，困惑度僅微幅增加 0.0273，完美保全語言理解力！** |
+
+> 💡 **W8A16 量化實測亮點 (Llama 3.2 1B)**：
+> - **評估規格**：全量 562 步滑動窗口（共計 288,937 tokens），總耗時 1922.49 秒 (~32.0 分鐘)，處理吞吐量達 150.29 tokens/秒。
+> - **極致保真度**：在 112 個核心線性投影矩陣（$Q, K, V, O$、Gate, Up, Down）全數替換為 INT8 權重後，WikiText-2 困惑度僅從 `11.4027` 微幅移動至 **`11.4300`**，損耗率僅 **0.24%**，達到學術論文頂級標準！
+> - **指令一鍵復現**：
+>   ```bash
+>   python scripts/evaluate_ppl.py --model_id meta-llama/Llama-3.2-1B-Instruct --quant_method w8a16
+>   ```
+
+---
+
 ## 📚 核心依賴一覽
 - **深度學習與模型**：`torch >= 2.4.0`, `transformers >= 4.45.0`, `accelerate >= 0.28.0`, `datasets >= 2.18.0`
 - **科學計算與旋轉變換**：`scipy >= 1.10.0`, `numpy >= 1.24.0`

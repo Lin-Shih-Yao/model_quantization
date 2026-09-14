@@ -178,8 +178,14 @@ def parse_args():
         "--quant_method",
         type=str,
         default="none",
-        choices=["none", "w8a16"],
+        choices=["none", "w8a16", "w8a8"],
         help="Quantization method to apply before evaluation (default: none for unquantized model)",
+    )
+    parser.add_argument(
+        "--calib_file",
+        type=str,
+        default=None,
+        help="Path to calibration .pt file (used by W8A8 for activation clipping)",
     )
     return parser.parse_args()
 
@@ -199,6 +205,8 @@ def main():
     print("🧪 Official Hugging Face Strided Sliding Window Perplexity Benchmark")
     print(f"  • Target Model : {resolved_path}")
     print(f"  • Quant Method : {args.quant_method.upper()}")
+    if args.calib_file:
+        print(f"  • Calib File   : {args.calib_file}")
     print(f"  • Device GPU   : {device.upper()} (Apple Silicon MPS / CUDA)")
     print(f"  • Precision    : {args.dtype}")
     print(f"  • Dataset      : {args.dataset}")
@@ -227,6 +235,10 @@ def main():
         from src.quantization import quantize_model_w8a16
         print("\n⚙️ 正在套用 W8A16 核心層 INT8 量化...")
         model = quantize_model_w8a16(model)
+    elif args.quant_method == "w8a8":
+        from src.quantization import quantize_model_w8a8
+        print("\n⚙️ 正在套用 W8A8 核心層 INT8 全量化 (結合激活值截斷)...")
+        model = quantize_model_w8a8(model, calib_file=args.calib_file)
 
     # 執行官方標準 Strided Sliding Window PPL 評估
     results = evaluate_ppl(

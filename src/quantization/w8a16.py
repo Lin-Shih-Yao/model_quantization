@@ -7,10 +7,10 @@ Every function is kept strictly concise (< 20 lines) for readability.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-TARGET_MODULE_NAMES = (
-    "q_proj", "k_proj", "v_proj", "o_proj",
-    "gate_proj", "up_proj", "down_proj"
+from src.quantization.utils import (
+    TARGET_MODULE_NAMES,
+    quantize_weight_int8,
+    replace_linear_with_factory,
 )
 
 
@@ -30,12 +30,7 @@ class W8A16Linear(nn.Module):
         """將原生 nn.Linear 轉換為 W8A16Linear，對齊硬體裝置與精度並轉為 INT8。"""
         qlayer = cls(linear.in_features, linear.out_features, bias=(linear.bias is not None))
         qlayer.to(device=linear.weight.device, dtype=linear.weight.dtype)
-        w = linear.weight.data.float()
-
-        # Per-channel 對稱 Scale: S = max(|W|, dim=1) / 127
-        scales = torch.clamp(w.abs().amax(dim=1, keepdim=True) / 127.0, min=1e-8)
-        w_int8 = torch.clamp(torch.round(w / scales), -127, 127).to(torch.int8)
-
+        w_int8, scales = quantize_weight_int8(linear.weight.data)
         qlayer.weight_int8.copy_(w_int8)
         qlayer.scales.copy_(scales)
         if linear.bias is not None:
@@ -51,14 +46,11 @@ class W8A16Linear(nn.Module):
 
 def replace_linear_modules(module: nn.Module, target_names: tuple = TARGET_MODULE_NAMES) -> int:
     """遞迴走訪神經網路子層，遇到目標名稱的 Linear 即替換為 W8A16Linear。"""
-    count = 0
-    for name, child in module.named_children():
-        if isinstance(child, nn.Linear) and any(t in name for t in target_names):
-            setattr(module, name, W8A16Linear.from_linear(child))
-            count += 1
-        else:
-            count += replace_linear_modules(child, target_names)
-    return count
+    return replace_linear_with_factory(
+        module,
+        factory_fn=lambda linear, _name: W8A16Linear.from_linear(linear),
+        target_names=target_names,
+    )
 
 
 def quantize_model_w8a16(model: nn.Module, target_names: tuple = TARGET_MODULE_NAMES) -> nn.Module:

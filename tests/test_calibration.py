@@ -77,7 +77,29 @@ def test_hook_lifecycle():
     assert observers["q_proj"].sample_count == 1
 
 
+def test_calibration_profiler():
+    """測試輕量 CalibrationProfiler 收集純量極值與存檔。"""
+    from src.quantization.profiler import CalibrationProfiler, save_stats_to_json
+    import tempfile
+
+    model = DummyDecoderLayer(hidden_dim=16)
+    profiler = CalibrationProfiler()
+    calib_tensor = torch.randn(4, 8, 16)
+
+    stats = profiler.collect_stats(model, calib_tensor, device="cpu")
+    assert "q_proj" in stats
+    assert "gate_proj" in stats
+    assert stats["q_proj"]["min"] < stats["q_proj"]["max"]
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        json_path = save_stats_to_json(
+            stats, "TestModel", "wikitext2", 4, node_name="Node_A", custom_dir=tmp_dir
+        )
+        assert os.path.exists(json_path)
+
+
 if __name__ == "__main__":
     test_layer_observer_basic()
     test_hook_lifecycle()
+    test_calibration_profiler()
     print("🎉 All calibration unit tests passed successfully!")

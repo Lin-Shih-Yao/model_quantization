@@ -14,10 +14,17 @@ from src.quantization.utils import (
     find_calib_scale_and_clip,
 )
 
+from src.quantization.profiler import CalibrationProfiler, save_stats_to_json
+from src.quantization.fake_quant import FakeQuantizer, asymmetric_fake_quantize
+
 __all__ = [
     "get_calib_dataset",
     "LayerObserver",
     "calibrate_model",
+    "CalibrationProfiler",
+    "save_stats_to_json",
+    "FakeQuantizer",
+    "asymmetric_fake_quantize",
     "W8A16Linear",
     "quantize_model_w8a16",
     "W8A8Linear",

@@ -7,6 +7,7 @@ Evaluates models on standard WikiText-2 test set with Apple Silicon MPS GPU acce
 strict Context Label Masking (-100), and immediate per-step MPS memory cleanup.
 """
 import argparse
+import csv
 import gc
 import math
 import os
@@ -130,6 +131,27 @@ def evaluate_ppl(
         "tokens_per_sec": total_evaluated_tokens / elapsed_sec if elapsed_sec > 0 else 0,
         "total_steps": step_count,
     }
+
+
+def log_result_to_csv(
+    log_path: str,
+    node_name: str,
+    model_id: str,
+    calib_dataset: str,
+    n_samples: int | str,
+    bit_str: str,
+    ppl_score: float,
+):
+    """將單次實驗結果以 Append 模式安全寫入 CSV 檔案，若為空自動建立表頭。"""
+    os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
+    is_empty = not os.path.exists(log_path) or os.path.getsize(log_path) == 0
+
+    with open(log_path, mode="a", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        if is_empty:
+            writer.writerow(["Node", "Model", "Calib_Dataset", "N_Samples", "A_Bit", "PPL"])
+        writer.writerow([node_name, model_id, calib_dataset, n_samples, bit_str, f"{ppl_score:.4f}"])
+    print(f"📝 [成績單歸檔] {node_name} | {model_id} | {calib_dataset} | N={n_samples} | {bit_str} -> PPL: {ppl_score:.4f}")
 
 
 def parse_args():

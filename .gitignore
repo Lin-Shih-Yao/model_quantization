@@ -42,7 +42,7 @@ env/
 *.ckpt
 
 # Model & Dataset caches
-models/
+/models/
 .cache/
 hf_cache/
 datasets_cache/

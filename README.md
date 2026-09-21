@@ -1,8 +1,8 @@
 # Model Quantization Analysis & Advanced Rotation Framework
 
-這是一個專注於**大語言模型（LLM）量化分析**與**進階正交旋轉量化技術（Rotation-based Quantization）**的研究與評估框架。
+這是一個專注於**大語言模型（LLM）量化分析**、**全自動化量化基準評估**與**進階正交旋轉量化技術（Rotation-based Quantization）**的研究與評估框架。
 
-本專案旨在系統性評估現代開源主流模型在不同精度與量化策略下的表現，並深入探討利用旋轉變換（如 Walsh-Hadamard Transform、SpinQuant 等）消除激活值異常值（Activation Outliers）對極限低位元量化（如 W4A4、W3A3）的改善效果。
+本專案旨在系統性評估現代主流開源端側模型在不同精度與量化策略下的表現，並深入探討利用旋轉變換（如 Walsh-Hadamard Transform、SpinQuant 等）消除激活值異常值（Activation Outliers）對極限低位元量化（如 W4A4、W3A3）的改善效果。
 
 ---
 
@@ -11,6 +11,7 @@
 ### 第一階段：多模型 $\times$ 多精度量化基準分析 (Baseline & Precision Benchmark)
 - **橫向比較**：在相同精度（如 W8A16, W4A16, W8A8, W4A4, FP8）下，分析不同模型架構對量化誤差的抗性。
 - **縱向分析**：繪製各模型在 FP16 $\rightarrow$ FP8 $\rightarrow$ INT8 $\rightarrow$ INT4 $\rightarrow$ INT3 $\rightarrow$ INT2 的困惑度（PPL）與精度衰減曲線。
+- **全自動矩陣管線**：以五模組解耦架構自動遍歷 `[模型] × [資料集] × [校準樣本數] × [位元]`，並具備顯存安全回收與斷線防撞記錄機制。
 - **硬體效能**：評估不同量化策略對顯存佔用（VRAM/RAM）、推理延遲（Latency）與吞吐量的影響。
 
 ### 第二階段：進階旋轉量化技術 (Advanced Rotation Techniques)
@@ -37,30 +38,66 @@
 model_quantization/
 ├── README.md                  # 專案說明文件與最新實測成果
 ├── requirements.txt           # 核心依賴清單
-├── .gitignore                 # Git 忽略配置 (自動排除 models/ 龐大權重)
+├── .gitignore                 # Git 忽略配置 (自動排除 /models/ 龐大權重)
 ├── src/
 │   ├── __init__.py
-│   ├── models/                # 模型載入、推論引擎與架構擴充
+│   ├── models/                # 模型載入、推論引擎與架構解耦
 │   │   ├── __init__.py
 │   │   ├── loader.py          # 模型與 Tokenizer 統一載入器、裝置偵測與路徑解析
 │   │   └── inference.py       # 自適應 Chat Template 純文字高效推論引擎
-│   ├── eval/                  # 評估 Pipeline (PPL 計算, Profiler, Latency)
+│   ├── eval/                  # 評估 Pipeline (PPL 計算, Profiler, 成績單寫入)
 │   │   ├── __init__.py
-│   │   ├── ppl.py             # 官方標準 Strided Sliding Window PPL 核心評估模組
+│   │   ├── ppl.py             # 模組 4: 官方標準滑動窗口 PPL 核心評估與 CSV 成績單日誌
 │   │   └── profile_matrix.py  # 激活特徵矩陣與離群尖刺診斷分析
-│   └── quantization/          # 量化核心模組 (Uniform Quantizer, QuantLinear, FP8, SpinQuant)
-│       └── __init__.py
+│   └── quantization/          # 量化核心演算法模組庫
+│       ├── __init__.py
+│       ├── data_loader.py     # 模組 1: 多領域校準資料抽取器 (WikiText2, C4, HumanEval, GSM8K)
+│       ├── profiler.py        # 模組 2: 激活值與權重極值採集分析器 (Forward Hooks 監控每層 X_max)
+│       ├── fake_quant.py      # 模組 3: 偽量化核心算子與 Pre-Hook 動態注入器 (W16A8 / W16A4)
+│       ├── w8a16.py           # INT8 Weight-Only 量化模組
+│       ├── w8a8.py            # INT8 權重與激活量化 (SmoothQuant 支援)
+│       ├── calibration.py     # 離線激活值校準與 Scale 運算
+│       ├── observer.py        # MinMax / Histogram 激活分佈觀察器
+│       ├── utils.py           # 量化尺度 Scale & Zero-point 計算工具函式
+│       └── dataset.py         # 基礎校準資料集封裝
 ├── notebooks/                 # 雲端 Jupyter 筆記本 (Google Colab 專用)
 │   └── colab_quantization_benchmark.ipynb # 一鍵雲端評估與視覺化 Notebook
-├── scripts/                   # CLI 捷徑與下載工具
+├── scripts/                   # 專案級自動化管線與 CLI 工具
+│   ├── run_pipeline.py        # 模組 5: 五模組自動化矩陣量化評估主控制器 (支援 Dry Run)
+│   ├── calibrate.py           # 獨立離線校準與 Scale 導出 CLI
 │   ├── demo_inference.py      # 純文字輕量化推論測試腳本
-│   ├── download_model.py      # 單一模型權重下載工具 (支援 HF Token)
-│   ├── download_all_models.py  # 批次模型下載工具
-│   ├── evaluate_ppl.py        # PPL 評估 CLI 捷徑
-│   └── profile_matrix.py      # 激活矩陣診斷 CLI 捷徑
-└── tests/                     # 單元測試 (驗證量化數值誤差與正交性)
-    └── __init__.py
+│   └── download_model.py      # 模型權重下載工具 (支援單一、自訂清單與 --all 批次下載)
+└── tests/                     # 單元測試庫 (驗證量化數值誤差與正交性)
+    ├── __init__.py
+    ├── test_calibration.py    # 模組 1 & 模組 2 校準極值統計單元測試
+    ├── test_w8a16.py          # W8A16 量化精度與層替換測試
+    └── test_w8a8.py           # W8A8 量化數值精確度測試
 ```
+
+---
+
+## ⚡ 核心架構：五模組自動化量化矩陣評估管線
+
+專案將 PTQ（訓練後量化）與評估流程解耦為五大獨立模組，透過控制器自動輪巡 `[Models] × [Datasets] × [N_samples] × [Bits]` 矩陣：
+
+```mermaid
+graph TD
+    M1["模組 1: data_loader.py<br>多領域校準資料抽取<br>(WikiText-2, C4, HumanEval, GSM8K)"] -->|固定形狀張量 (N, 2048)| M2["模組 2: profiler.py<br>極值採集器 (Forward Hook)<br>統計每層 X_max 並存為 JSON"]
+    M2 -->|層級極值統計檔| M3["模組 3: fake_quant.py<br>偽量化動態注入器 (Pre-Hook)<br>支援 W16A8 / W16A4"]
+    M3 -->|掛載偽量化模型| M4["模組 4: ppl.py<br>標準滑動窗口困惑度評估<br>即時寫入 CSV 成績單"]
+    M5["模組 5: run_pipeline.py<br>主控制器 (矩陣調度)"] -.->|調度迴圈與顯存清理| M1
+    M5 -.->|調度迴圈與顯存清理| M2
+    M5 -.->|調度迴圈與顯存清理| M3
+    M5 -.->|調度迴圈與顯存清理| M4
+```
+
+### 管線亮點特性：
+1. **極速乾跑驗證 (Dry Run Mode)**：
+   - 支援 `test_mode=True`，在極少步數（`max_steps=5`）與小樣本（`N=16`）下秒級驗證全管線各模組是否暢通。
+2. **雙節點防撞記錄 (Dual-Node Safe Logging)**：
+   - 支援 `Node_A` / `Node_B` 多機並行評估，成績單自動寫入獨立 CSV（支援 Google Drive `/content/drive/MyDrive/results_{node_name}.csv` 或本地 `./results_{node_name}.csv`），檔名與資料夾嚴防覆蓋。
+3. **嚴格顯存釋放機制 (VRAM Survival Cleanup)**：
+   - 每次測試完一個位元立即卸載 Pre-Hook 並執行顯存垃圾回收；切換模型時徹底刪除模型物件並清除 GPU 快取，確保連續評估不當機。
 
 ---
 
@@ -71,6 +108,7 @@ model_quantization/
 
 ```bash
 # 建立並啟用虛擬環境
+python3 -m venv .venv
 source .venv/bin/activate
 
 # 安裝核心依賴
@@ -78,40 +116,69 @@ pip install -r requirements.txt
 ```
 
 ### 2. 模型權重下載
-支援將 Hugging Face 權重直接下載至本地 `./models/` 目錄（Llama 3.2 等受保護模型支援 `--token` 參數）：
+支援將 Hugging Face 權重直接下載至本地 `./models/` 目錄（支援單一模型、自訂清單與全量基準下載，受保護模型支援 `--token` 參數）：
 
 ```bash
-# 下載單一指定模型 (若為 Gated Model 可附帶 --token)
+# 1. 下載單一指定模型 (若為 Gated Model 可附帶 --token)
 python scripts/download_model.py --model_id meta-llama/Llama-3.2-1B-Instruct
 
-# 或批次下載所有目標模型
-python scripts/download_all_models.py
+# 2. 批次下載專案所有基準模型 (Llama 3.2, Qwen 3.5, Gemma)
+python scripts/download_model.py --all
+
+# 3. 自訂下載多個模型清單
+python scripts/download_model.py --models Qwen/Qwen3.5-2B google/gemma-2-2b-it
 ```
 
-### 3. 純文字高效推論測試
-專案提供專為語言模型設計的 `demo_inference.py`，支援自動偵測本地權重與**「非文字模組自動剝離（Text-Only Mode）」**，能主動釋放多模態視覺與語音編碼器，使記憶體佔用降至最低，避免設備發熱：
+### 3. 一鍵執行五模組自動化量化矩陣管線
+透過主控制器 `scripts/run_pipeline.py` 一鍵自動執行校準、極值採集、偽量化與 PPL 評估：
+
+```bash
+# 1. 極速乾跑測試模式 (驗證所有模組銜接正確，耗時 < 1 分鐘)
+python scripts/run_pipeline.py
+
+# 2. 全量矩陣評估模式 (依據 CONFIG 設定遍歷所有維度)
+python -c "from scripts.run_pipeline import main; main(test_mode=False)"
+```
+
+### 4. 獨立離線校準 (Activation Calibration)
+若需單獨對模型進行多樣本激活值採集並導出校準 Scale：
+
+```bash
+python scripts/calibrate.py --model_id Qwen/Qwen3.5-2B --n_samples 128 --seq_len 2048 --output_dir ./calibration_results
+```
+
+### 5. 純文字高效推論測試
+專案提供專為語言模型設計的 `demo_inference.py`，支援自動偵測本地權重與**「非文字模組自動剝離（Text-Only Mode）」**，能主動釋放多模態視覺與語音編碼器，使記憶體佔用降至最低：
 
 ```bash
 # 測試 Llama 3.2 1B 純文字推論
 python scripts/demo_inference.py --model_id ./models/meta-llama_Llama-3.2-1B-Instruct --max_new_tokens 50
 
-# 測試 Llama 3.2 3B 純文字推論
-python scripts/demo_inference.py --model_id ./models/meta-llama_Llama-3.2-3B-Instruct --max_new_tokens 50
-
 # 測試 Qwen 3.5 2B 純文字推論
 python scripts/demo_inference.py --model_id ./models/Qwen_Qwen3.5-2B --max_new_tokens 50
-
-# 測試 Gemma 4 E2B 純文字推論
-python scripts/demo_inference.py --model_id ./models/google_gemma-4-E2B-it --max_new_tokens 50
 ```
 
-### 4. 雲端 GPU 極速評估 (Google Colab)
-若本地記憶體有限（如跑大型模型長窗口注意力容易 OOM），建議直接使用專案內的 Colab 雲端筆記本：
+### 6. 執行單元測試
+驗證校準極值收集、W8A16 與 W8A8 數值誤差與層替換邏輯：
+
+```bash
+# 驗證校準資料集與極值分析模組
+python tests/test_calibration.py
+
+# 驗證 W8A16 算子與替換邏輯
+python tests/test_w8a16.py
+
+# 驗證 W8A8 算子與數值精度
+python tests/test_w8a8.py
+```
+
+### 7. 雲端 GPU 極速評估 (Google Colab)
+若本地記憶體有限，建議直接使用專案內的 Colab 雲端筆記本：
 - **筆記本檔案**：[`notebooks/colab_quantization_benchmark.ipynb`](notebooks/colab_quantization_benchmark.ipynb)
 - **核心優勢**：
-  - 支援免費 T4 (16GB 獨立 VRAM)，徹底擺脫本地 Unified Memory 黑屏困擾。
+  - 支援免費 T4 / A100 獨立 VRAM。
   - 支援完整 2048 官方標準窗口與全量 578 步 WikiText-2 PPL 評估。
-  - 內建 Matplotlib 各層激活峰均比（PAR）可視化圖表與 Google Drive 自動備份。
+  - 支援自動掛載 Google Drive，斷線不遺失評估成績單。
 
 ---
 
@@ -146,24 +213,24 @@ python scripts/demo_inference.py --model_id ./models/google_gemma-4-E2B-it --max
 | **Gemma 4 E2B** | 5.10 B | — | *12707.84 (多模態架構失配)* | Colab 全量 (多模態架構) | ⚠️ 因原生多模態架構與 PLE 詞表，純文字標準 PPL 評估不適用 |
 
 > 💡 **全量評估亮點 (Colab Cloud Benchmark)**：  
-> - **Qwen 3.5 4B**：在 Google Colab (CUDA, BF16) 上執行 **578 步全量 WikiText-2（共 297,053 tokens）** 深度評估，耗時 5051.78 秒（~84.2 分鐘，吞吐量 58.80 tokens/s），最終測得困惑度為 **`8.2480`**！大幅刷新專案全量測試最佳紀錄，以壓倒性優勢展現 4B 旗艦級語意連貫度！
-> - **Llama 3.2 3B**：在 Google Colab (CUDA, BF16) 上執行 **562 步全量 WikiText-2（共 288,937 tokens）** 深度評估，耗時 3688 秒（~61.5 分鐘，吞吐量 78.33 tokens/s），最終測得困惑度為 **`9.5177`**！全量實測更進一步收斂，展現 3B 級別最強基線！
-> - **Qwen 3.5 2B**：在 Google Colab (CUDA, BF16) 上執行 **578 步全量 WikiText-2（共 297,053 tokens）** 深度評估，耗時 2357 秒（~39.3 分鐘，吞吐量 126.01 tokens/s），最終測得困惑度為 **`10.6631`**！相較 40 步快速模式（`11.20`）更進一步收斂，甚至勝過前代參數量更大的 Qwen 2.5 3B 論文基線（`10.72`）！
-> - **Llama 3.2 1B**：在 Google Colab (CUDA, BF16) 上執行 **562 步全量 WikiText-2（共 288,937 tokens）** 深度評估，耗時 1608 秒（~26.8 分鐘，吞吐量 179.58 tokens/s），最終測得困惑度為 **`11.4027`**，精準落在官方技術報告 `11.0 ~ 12.0` 區間！
-> - **Gemma 2 2B**：在 Google Colab (CUDA, BF16) 上執行 **564 步全量 WikiText-2（共 288,894 tokens，Context 1024 / Stride 512）** 深度評估，耗時 1529.33 秒（~25.5 分鐘，吞吐量 188.90 tokens/s），最終測得困惑度為 **`11.8346`**！以純文字架構完美收斂，順利打通 Google Gemma 體系的量化評估基線！
+> - **Qwen 3.5 4B**：在 Google Colab (CUDA, BF16) 上執行 **578 步全量 WikiText-2（共 297,053 tokens）** 深度評估，耗時 5051.78 秒（~84.2 分鐘，吞吐量 58.80 tokens/s），最終測得困惑度為 **`8.2480`**！大幅刷新專案全量測試最佳紀錄！
+> - **Llama 3.2 3B**：全量 562 步 WikiText-2 實測困惑度達 **`9.5177`**，展現 3B 級別最強基線。
+> - **Qwen 3.5 2B**：全量 578 步 WikiText-2 實測困惑度達 **`10.6631`**，超越前代 Qwen 2.5 3B 論文基線（`10.72`）。
+> - **Llama 3.2 1B**：全量 562 步實測困惑度為 **`11.4027`**，精準落在官方技術報告 `11.0 ~ 12.0` 區間。
+> - **Gemma 2 2B**：全量 564 步實測困惑度為 **`11.8346`**，以純文字架構完美收斂。
 
 #### 執行標準 PPL 評估指令
-專案核心評估腳本位於 `src/eval/ppl.py`，支援多種規格調度：
+透過 Python 模組模式直接呼叫 `src/eval/ppl.py`，支援多種規格調度：
 
 ```bash
 # 1. 執行 40 步快速驗證模式 (建議初次篩選，約 1~5 分鐘)
-python src/eval/ppl.py --model_id ./models/meta-llama_Llama-3.2-1B-Instruct --dataset wikitext-2-raw-v1 --max_length 2048 --stride 512 --max_steps 40
+python -m src.eval.ppl --model_id ./models/meta-llama_Llama-3.2-1B-Instruct --dataset wikitext-2-raw-v1 --max_length 2048 --stride 512 --max_steps 40
 
 # 2. 執行 Llama 3.2 3B 快速驗證
-python src/eval/ppl.py --model_id ./models/meta-llama_Llama-3.2-3B-Instruct --dataset wikitext-2-raw-v1 --max_length 2048 --stride 512 --max_steps 40
+python -m src.eval.ppl --model_id ./models/meta-llama_Llama-3.2-3B-Instruct --dataset wikitext-2-raw-v1 --max_length 2048 --stride 512 --max_steps 40
 
 # 3. 執行全量完整資料集評估 (不帶 --max_steps 即評估全部 578 步，約 30~40 分鐘)
-python src/eval/ppl.py --model_id ./models/Qwen_Qwen3.5-2B --dataset wikitext-2-raw-v1 --max_length 2048 --stride 512
+python -m src.eval.ppl --model_id ./models/Qwen_Qwen3.5-2B --dataset wikitext-2-raw-v1 --max_length 2048 --stride 512
 ```
 
 ---
@@ -181,7 +248,7 @@ python src/eval/ppl.py --model_id ./models/Qwen_Qwen3.5-2B --dataset wikitext-2-
 
 ```bash
 # 執行激活矩陣體檢
-python src/eval/profile_matrix.py --model_id ./models/Qwen_Qwen3.5-2B --num_tokens 1024
+python -m src.eval.profile_matrix --model_id ./models/Qwen_Qwen3.5-2B --num_tokens 1024
 ```
 
 ---
@@ -199,7 +266,7 @@ python src/eval/profile_matrix.py --model_id ./models/Qwen_Qwen3.5-2B --num_toke
 > - **極致保真度**：在 112 個核心線性投影矩陣（$Q, K, V, O$、Gate, Up, Down）全數替換為 INT8 權重後，WikiText-2 困惑度僅從 `11.4027` 微幅移動至 **`11.4300`**，損耗率僅 **0.24%**，達到學術論文頂級標準！
 > - **指令一鍵復現**：
 >   ```bash
->   python scripts/evaluate_ppl.py --model_id meta-llama/Llama-3.2-1B-Instruct --quant_method w8a16
+>   python -m src.eval.ppl --model_id meta-llama/Llama-3.2-1B-Instruct --quant_method w8a16
 >   ```
 
 ---

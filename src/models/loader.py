@@ -99,9 +99,6 @@ def load_causal_model(
     return model
 
 
-load_model = load_causal_model
-
-
 def load_pure_text_model_and_tokenizer(
     model_id_or_path: str,
     device: str | None = None,
@@ -115,7 +112,3 @@ def load_pure_text_model_and_tokenizer(
     tokenizer = load_tokenizer(model_id_or_path)
     model = load_causal_model(model_id_or_path, device=target_device, dtype=dtype, **kwargs)
     return model, tokenizer
-
-
-# 向後相容別名
-load_model_and_tokenizer = load_pure_text_model_and_tokenizer

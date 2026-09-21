@@ -44,7 +44,7 @@ def generate_response(
             add_generation_prompt=True,
         )
     else:
-        formatted_prompt = prompt
+        formatted_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
 
     # 2. Tokenize 輸入並送往目標設備
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(device)
@@ -54,7 +54,7 @@ def generate_response(
     start_time = time.time()
     gen_kwargs = {
         "max_new_tokens": max_new_tokens,
-        "pad_token_id": tokenizer.eos_token_id or 0,
+        "pad_token_id": tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id,
     }
     if do_sample and temperature > 0:
         gen_kwargs.update({

@@ -3,8 +3,8 @@ CLI Shortcut for LLM Activation Calibration.
 Slices WikiText-2 (train split), hooks Linear layers, and saves .pt scales for PTQ.
 
 Usage:
-    python scripts/calibrate.py --model_id Qwen/Qwen3.5-2B
-    python scripts/calibrate.py --model_id meta-llama/Llama-3.2-1B --output_dir /content/drive/MyDrive/calib_results
+    python scripts/run_calibration.py --model_id Qwen/Qwen3.5-2B
+    python scripts/run_calibration.py --model_id meta-llama/Llama-3.2-1B --output_dir /content/drive/MyDrive/calib_results
 """
 
 import argparse

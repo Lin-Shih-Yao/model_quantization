@@ -16,7 +16,8 @@ import torch
 # 確保專案根目錄在 sys.path 中
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from src.quantization.data_loader import CONFIG, get_calibration_dataloader
+from configs import CONFIG
+from src.data import get_calibration_dataloader
 from src.quantization.profiler import CalibrationProfiler, save_stats_to_json
 from src.quantization.fake_quant import FakeQuantizer
 from src.eval.ppl import evaluate_ppl, log_result_to_csv

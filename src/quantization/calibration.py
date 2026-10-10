@@ -10,7 +10,7 @@ import time
 import torch
 from tqdm import tqdm
 
-from src.quantization.dataset import get_calib_dataset
+from src.data import get_calib_dataset
 from src.quantization.observer import LayerObserver
 
 TARGET_PROJECTIONS = (

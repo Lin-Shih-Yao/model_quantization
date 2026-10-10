@@ -2,7 +2,7 @@
 Quantization Core Modules (Calibration, Observers, Datasets, W8A16, W8A8, Utilities)
 """
 
-from src.quantization.dataset import get_calib_dataset
+from src.data import get_calib_dataset, get_calibration_dataloader
 from src.quantization.observer import LayerObserver
 from src.quantization.calibration import calibrate_model
 from src.quantization.w8a16 import W8A16Linear, quantize_model_w8a16

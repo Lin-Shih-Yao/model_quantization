@@ -39,32 +39,36 @@ model_quantization/
 ├── README.md                  # 專案說明文件與最新實測成果
 ├── requirements.txt           # 核心依賴清單
 ├── .gitignore                 # Git 忽略配置 (自動排除 /models/ 龐大權重)
+├── configs/                   # 全域實驗與排程設定
+│   ├── __init__.py
+│   └── pipeline_config.py     # 五模組管線實驗矩陣配置 (模型、資料集、N、位元)
 ├── src/
 │   ├── __init__.py
 │   ├── models/                # 模型載入、推論引擎與架構解耦
 │   │   ├── __init__.py
 │   │   ├── loader.py          # 模型與 Tokenizer 統一載入器、裝置偵測與路徑解析
 │   │   └── inference.py       # 自適應 Chat Template 純文字高效推論引擎
+│   ├── data/                  # 數據模組 (多領域校準資料抽取與切片)
+│   │   ├── __init__.py
+│   │   └── loader.py          # 模組 1: 多領域校準資料載入器 (WikiText2, C4, HumanEval, GSM8K)
 │   ├── eval/                  # 評估 Pipeline (PPL 計算, Profiler, 成績單寫入)
 │   │   ├── __init__.py
 │   │   ├── ppl.py             # 模組 4: 官方標準滑動窗口 PPL 核心評估與 CSV 成績單日誌
 │   │   └── profile_matrix.py  # 激活特徵矩陣與離群尖刺診斷分析
 │   └── quantization/          # 量化核心演算法模組庫
 │       ├── __init__.py
-│       ├── data_loader.py     # 模組 1: 多領域校準資料抽取器 (WikiText2, C4, HumanEval, GSM8K)
 │       ├── profiler.py        # 模組 2: 激活值與權重極值採集分析器 (Forward Hooks 監控每層 X_max)
 │       ├── fake_quant.py      # 模組 3: 偽量化核心算子與 Pre-Hook 動態注入器 (W16A8 / W16A4)
 │       ├── w8a16.py           # INT8 Weight-Only 量化模組
 │       ├── w8a8.py            # INT8 權重與激活量化 (SmoothQuant 支援)
 │       ├── calibration.py     # 離線激活值校準與 Scale 運算
 │       ├── observer.py        # MinMax / Histogram 激活分佈觀察器
-│       ├── utils.py           # 量化尺度 Scale & Zero-point 計算工具函式
-│       └── dataset.py         # 基礎校準資料集封裝
+│       └── utils.py           # 量化尺度 Scale & Zero-point 計算工具函式
 ├── notebooks/                 # 雲端 Jupyter 筆記本 (Google Colab 專用)
 │   └── colab_quantization_benchmark.ipynb # 一鍵雲端評估與視覺化 Notebook
 ├── scripts/                   # 專案級自動化管線與 CLI 工具
 │   ├── run_pipeline.py        # 模組 5: 五模組自動化矩陣量化評估主控制器 (支援 Dry Run)
-│   ├── calibrate.py           # 獨立離線校準與 Scale 導出 CLI
+│   ├── run_calibration.py    # 獨立離線校準與 Scale 導出 CLI
 │   ├── demo_inference.py      # 純文字輕量化推論測試腳本
 │   └── download_model.py      # 模型權重下載工具 (支援單一、自訂清單與 --all 批次下載)
 └── tests/                     # 單元測試庫 (驗證量化數值誤差與正交性)
@@ -82,7 +86,7 @@ model_quantization/
 
 ```mermaid
 graph TD
-    M1["模組 1: data_loader.py<br>多領域校準資料抽取<br>(WikiText-2, C4, HumanEval, GSM8K)"] -->|固定形狀張量 (N, 2048)| M2["模組 2: profiler.py<br>極值採集器 (Forward Hook)<br>統計每層 X_max 並存為 JSON"]
+    M1["模組 1: src/data/loader.py<br>多領域校準資料抽取<br>(WikiText-2, C4, HumanEval, GSM8K)"] -->|固定形狀張量 (N, 2048)| M2["模組 2: profiler.py<br>極值採集器 (Forward Hook)<br>統計每層 X_max 並存為 JSON"]
     M2 -->|層級極值統計檔| M3["模組 3: fake_quant.py<br>偽量化動態注入器 (Pre-Hook)<br>支援 W16A8 / W16A4"]
     M3 -->|掛載偽量化模型| M4["模組 4: ppl.py<br>標準滑動窗口困惑度評估<br>即時寫入 CSV 成績單"]
     M5["模組 5: run_pipeline.py<br>主控制器 (矩陣調度)"] -.->|調度迴圈與顯存清理| M1
@@ -144,7 +148,7 @@ python -c "from scripts.run_pipeline import main; main(test_mode=False)"
 若需單獨對模型進行多樣本激活值採集並導出校準 Scale：
 
 ```bash
-python scripts/calibrate.py --model_id Qwen/Qwen3.5-2B --n_samples 128 --seq_len 2048 --output_dir ./calibration_results
+python scripts/run_calibration.py --model_id Qwen/Qwen3.5-2B --n_samples 128 --seq_len 2048 --output_dir ./calibration_results
 ```
 
 ### 5. 純文字高效推論測試

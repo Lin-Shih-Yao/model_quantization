@@ -1,3 +1,3 @@
-from .loader import get_calibration_dataloader, get_calib_dataset
+from .loader import get_calibration_dataloader, get_calib_dataset, TEXT_EXTRACTORS
 
-__all__ = ["get_calibration_dataloader", "get_calib_dataset"]
+__all__ = ["get_calibration_dataloader", "get_calib_dataset", "TEXT_EXTRACTORS"]

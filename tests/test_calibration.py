@@ -36,6 +36,10 @@ def test_layer_observer_basic():
     obs = LayerObserver("test_layer", clip_quantile=0.99)
     dummy_input = torch.tensor([[[-2.0, 1.0, 4.0], [0.5, -3.0, 1.5]]])
 
+    # 測試更新前的防呆
+    uninit_obs = LayerObserver("uninit")
+    assert uninit_obs.compute_channel_sym_scale(bits=8) is None
+
     obs.update(dummy_input)
 
     assert obs.min_val == -3.0
@@ -50,6 +54,18 @@ def test_layer_observer_basic():
     asym_s, asym_zp = obs.compute_asym_scale_zp(bits=8)
     assert asym_s > 0.0
     assert 0 <= asym_zp <= 255
+
+    # 測試通道對稱量化 Scale 計算
+    ch_sym_s = obs.compute_channel_sym_scale(bits=8)
+    assert ch_sym_s is not None
+    assert ch_sym_s.shape == (3,)
+    expected_ch_scale = torch.tensor([2.0 / 127.0, 3.0 / 127.0, 4.0 / 127.0])
+    assert torch.allclose(ch_sym_s, expected_ch_scale, atol=1e-5)
+
+    # 驗證 to_dict 是否正確包含 int8_channel_sym_scale
+    dict_output = obs.to_dict()
+    assert "int8_channel_sym_scale" in dict_output["scales"]
+    assert torch.equal(dict_output["scales"]["int8_channel_sym_scale"], ch_sym_s)
 
 
 def test_hook_lifecycle():
@@ -78,7 +94,7 @@ def test_hook_lifecycle():
 
 
 def test_calibration_profiler():
-    """測試輕量 CalibrationProfiler 收集純量極值與存檔。"""
+    """測試輕量 CalibrationProfiler 轉接器收集極值與存檔。"""
     from src.quantization.profiler import CalibrationProfiler, save_stats_to_json
     import tempfile
 
@@ -98,8 +114,32 @@ def test_calibration_profiler():
         assert os.path.exists(json_path)
 
 
+def test_unified_calibration_stats():
+    """測試統一 collect_calibration_stats 與 save_calibration_stats_json。"""
+    from src.quantization.calibration import (
+        collect_calibration_stats,
+        save_calibration_stats_json,
+    )
+    import tempfile
+
+    model = DummyDecoderLayer(hidden_dim=16)
+    calib_tensor = torch.randn(2, 4, 16)
+
+    stats = collect_calibration_stats(model, calib_tensor, device="cpu")
+    assert "q_proj" in stats
+    assert "scales" in stats["q_proj"]
+    assert "int8_sym_scale" in stats["q_proj"]["scales"]
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        json_path = save_calibration_stats_json(
+            stats, "TestModel", "c4", 2, node_name="Node_B", custom_dir=tmp_dir
+        )
+        assert os.path.exists(json_path)
+
+
 if __name__ == "__main__":
     test_layer_observer_basic()
     test_hook_lifecycle()
     test_calibration_profiler()
+    test_unified_calibration_stats()
     print("🎉 All calibration unit tests passed successfully!")

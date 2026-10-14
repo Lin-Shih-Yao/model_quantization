@@ -57,12 +57,12 @@ model_quantization/
 │   │   └── profile_matrix.py  # 激活特徵矩陣與離群尖刺診斷分析
 │   └── quantization/          # 量化核心演算法模組庫
 │       ├── __init__.py
-│       ├── profiler.py        # 模組 2: 激活值與權重極值採集分析器 (Forward Hooks 監控每層 X_max)
-│       ├── fake_quant.py      # 模組 3: 偽量化核心算子與 Pre-Hook 動態注入器 (W16A8 / W16A4)
+│       ├── calibration.py     # 模組 2: 統一離線激活值校準與 Scale 運算 (支援 PT 與 JSON 匯出)
+│       ├── observer.py        # 核心激活觀察器 (極值、99.99% 截斷、通道最大值、Symmetric/Asymmetric Scales)
+│       ├── profiler.py        # 輕量相容層: 轉接呼叫統一校準引擎
+│       ├── fake_quant.py      # 模組 3: 偽量化核心算子與 Pre-Hook 動態注入器 (對齊 W8A8 數值)
 │       ├── w8a16.py           # INT8 Weight-Only 量化模組
 │       ├── w8a8.py            # INT8 權重與激活量化 (SmoothQuant 支援)
-│       ├── calibration.py     # 離線激活值校準與 Scale 運算
-│       ├── observer.py        # MinMax / Histogram 激活分佈觀察器
 │       └── utils.py           # 量化尺度 Scale & Zero-point 計算工具函式
 ├── notebooks/                 # 雲端 Jupyter 筆記本 (Google Colab 專用)
 │   └── colab_quantization_benchmark.ipynb # 一鍵雲端評估與視覺化 Notebook
@@ -74,6 +74,7 @@ model_quantization/
 └── tests/                     # 單元測試庫 (驗證量化數值誤差與正交性)
     ├── __init__.py
     ├── test_calibration.py    # 模組 1 & 模組 2 校準極值統計單元測試
+    ├── test_fake_quant.py      # 模組 3 偽量化算子與多格式相容測試
     ├── test_w8a16.py          # W8A16 量化精度與層替換測試
     └── test_w8a8.py           # W8A8 量化數值精確度測試
 ```
@@ -86,8 +87,8 @@ model_quantization/
 
 ```mermaid
 graph TD
-    M1["模組 1: src/data/loader.py<br>多領域校準資料抽取<br>(WikiText-2, C4, HumanEval, GSM8K)"] -->|固定形狀張量 (N, 2048)| M2["模組 2: profiler.py<br>極值採集器 (Forward Hook)<br>統計每層 X_max 並存為 JSON"]
-    M2 -->|層級極值統計檔| M3["模組 3: fake_quant.py<br>偽量化動態注入器 (Pre-Hook)<br>支援 W16A8 / W16A4"]
+    M1["模組 1: src/data/loader.py<br>多領域校準資料抽取<br>(WikiText-2, C4, HumanEval, GSM8K)"] -->|固定形狀張量 (N, 2048)| M2["模組 2: calibration.py<br>統一校準採集器 (LayerObserver)<br>統計極值、截斷門檻並存為 PT/JSON"]
+    M2 -->|層級量化參數字典| M3["模組 3: fake_quant.py<br>偽量化動態注入器 (Pre-Hook)<br>支援對稱量化 (W16A8 / W16A4)"]
     M3 -->|掛載偽量化模型| M4["模組 4: ppl.py<br>標準滑動窗口困惑度評估<br>即時寫入 CSV 成績單"]
     M5["模組 5: run_pipeline.py<br>主控制器 (矩陣調度)"] -.->|調度迴圈與顯存清理| M1
     M5 -.->|調度迴圈與顯存清理| M2

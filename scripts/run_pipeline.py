@@ -18,8 +18,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from configs import CONFIG
 from src.data import get_calibration_dataloader
-from src.quantization.profiler import CalibrationProfiler, save_stats_to_json
-from src.quantization.fake_quant import FakeQuantizer
+from src.quantization import (
+    collect_calibration_stats,
+    save_calibration_stats_json,
+    FakeQuantizer,
+)
 from src.eval.ppl import evaluate_ppl, log_result_to_csv
 from src.models.loader import load_pure_text_model_and_tokenizer, resolve_model_path
 
@@ -103,12 +106,11 @@ def main(test_mode: bool = False):
                     seq_len=seq_len,
                 )
 
-                profiler = CalibrationProfiler()
-                layer_stats = profiler.collect_stats(model, calib_tensor, device=device)
+                layer_stats = collect_calibration_stats(model, calib_tensor, device=device)
                 del calib_tensor
 
                 # 存檔為 JSON (檔名內含 node_name 防撞)
-                save_stats_to_json(
+                save_calibration_stats_json(
                     stats=layer_stats,
                     model_name=model_id,
                     dataset_name=dataset_name,

@@ -4,7 +4,11 @@ Quantization Core Modules (Calibration, Observers, Datasets, W8A16, W8A8, Utilit
 
 from src.data import get_calib_dataset, get_calibration_dataloader
 from src.quantization.observer import LayerObserver
-from src.quantization.calibration import calibrate_model
+from src.quantization.calibration import (
+    calibrate_model,
+    collect_calibration_stats,
+    save_calibration_stats_json,
+)
 from src.quantization.w8a16 import W8A16Linear, quantize_model_w8a16
 from src.quantization.w8a8 import W8A8Linear, quantize_model_w8a8
 from src.quantization.utils import (
@@ -15,16 +19,23 @@ from src.quantization.utils import (
 )
 
 from src.quantization.profiler import CalibrationProfiler, save_stats_to_json
-from src.quantization.fake_quant import FakeQuantizer, asymmetric_fake_quantize
+from src.quantization.fake_quant import (
+    FakeQuantizer,
+    asymmetric_fake_quantize,
+    symmetric_fake_quantize,
+)
 
 __all__ = [
     "get_calib_dataset",
     "LayerObserver",
     "calibrate_model",
+    "collect_calibration_stats",
+    "save_calibration_stats_json",
     "CalibrationProfiler",
     "save_stats_to_json",
     "FakeQuantizer",
     "asymmetric_fake_quantize",
+    "symmetric_fake_quantize",
     "W8A16Linear",
     "quantize_model_w8a16",
     "W8A8Linear",

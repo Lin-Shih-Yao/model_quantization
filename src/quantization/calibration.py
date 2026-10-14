@@ -64,11 +64,78 @@ def run_forward_batches(model: torch.nn.Module, samples: list[torch.Tensor], dev
     """遍歷所有校準樣本進行單次前向傳播，激發並收集特徵張量。"""
     progress = tqdm(samples, desc="🚀 執行激活值校準前向傳播")
     for chunk in progress:
-        input_ids = chunk.to(device)
+        batch = chunk.to(device)
         with torch.no_grad():
-            model(input_ids=input_ids)
-        del input_ids
+            try:
+                model(input_ids=batch)
+            except TypeError:
+                model(batch)
+        del batch
         clean_memory(device)
+
+
+def collect_calibration_stats(
+    model: torch.nn.Module,
+    samples: torch.Tensor | list[torch.Tensor],
+    device: str = "cuda" if torch.cuda.is_available() else "cpu",
+    clip_quantile: float = 0.9999,
+) -> dict[str, dict]:
+    """通用前向校準統計採集器：掛載 LayerObserver、遍歷輸入樣本並回傳統計字典。"""
+    target_modules = find_target_linear_modules(model)
+    observers, hooks = attach_observers(target_modules, clip_quantile=clip_quantile)
+    model.eval()
+
+    try:
+        if isinstance(samples, torch.Tensor):
+            batches = [samples[i : i + 1] for i in range(samples.shape[0])]
+        else:
+            batches = samples
+        run_forward_batches(model, batches, device=device)
+    finally:
+        remove_all_hooks(hooks)
+
+    return {name: obs.to_dict() for name, obs in observers.items()}
+
+
+def _to_json_serializable(obj):
+    """將 Tensor 遞迴轉為純 Python 資料結構以利 JSON 序列化。"""
+    if isinstance(obj, torch.Tensor):
+        return obj.tolist()
+    if isinstance(obj, dict):
+        return {k: _to_json_serializable(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_to_json_serializable(x) for x in obj]
+    return obj
+
+
+def save_calibration_stats_json(
+    stats: dict,
+    model_name: str,
+    dataset_name: str,
+    n_samples: int,
+    node_name: str = "Node_A",
+    custom_dir: str | None = None,
+) -> str:
+    """將極值與量化統計儲存為 JSON 檔，支援 Colab 雙節點存檔防撞。"""
+    import json
+    safe_model = model_name.split("/")[-1].replace(" ", "_")
+    if custom_dir:
+        save_dir = custom_dir
+    elif os.path.exists("/content/drive/MyDrive"):
+        save_dir = "/content/drive/MyDrive/calibration_stats"
+    else:
+        save_dir = "./calibration_results"
+
+    os.makedirs(save_dir, exist_ok=True)
+    filename = f"stats_{node_name}_{safe_model}_{dataset_name}_N{n_samples}.json"
+    full_path = os.path.join(save_dir, filename)
+
+    serializable_stats = _to_json_serializable(stats)
+    with open(full_path, "w", encoding="utf-8") as f:
+        json.dump(serializable_stats, f, indent=2, ensure_ascii=False)
+
+    print(f"💾 [校準模組] 極值統計已儲存至: {full_path}")
+    return full_path
 
 
 def collect_and_save_stats(

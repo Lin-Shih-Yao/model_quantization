@@ -9,6 +9,17 @@ from datasets import load_dataset
 from transformers import PreTrainedTokenizerBase
 
 
+# ==============================================================================
+# 資料集文字抽取器映射表 (Extractor Mapping / Strategy Pattern)
+# ==============================================================================
+TEXT_EXTRACTORS = {
+    "wikitext2": lambda x: x.get("text", ""),
+    "c4": lambda x: x.get("text", ""),
+    "humaneval": lambda x: x.get("prompt", ""),
+    "gsm8k": lambda x: f"{x.get('question', '').strip()}\n{x.get('answer', '').strip()}" if (x.get("question") or x.get("answer")) else "",
+}
+
+
 def get_calibration_dataloader(
     tokenizer: PreTrainedTokenizerBase,
     dataset_name: str = "wikitext2",
@@ -32,6 +43,9 @@ def get_calibration_dataloader(
     Returns:
         torch.Tensor | list[torch.Tensor]
     """
+    if dataset_name not in TEXT_EXTRACTORS:
+        raise ValueError(f"不支援的資料集: {dataset_name} (支援列表: {list(TEXT_EXTRACTORS.keys())})")
+
     random.seed(seed)
     torch.manual_seed(seed)
 
@@ -50,25 +64,14 @@ def get_calibration_dataloader(
             dataset = load_dataset("openai/openai_humaneval", split="test")
     elif dataset_name == "gsm8k":
         dataset = load_dataset("gsm8k", "main", split="train")
-    else:
-        raise ValueError(f"不支援的資料集: {dataset_name}")
 
     samples: list[torch.Tensor] = []
     min_len = seq_len // 2
     pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
+    extractor = TEXT_EXTRACTORS[dataset_name]
 
     for item in dataset:
-        if dataset_name in ("wikitext2", "c4"):
-            text = item.get("text", "")
-        elif dataset_name == "humaneval":
-            text = item.get("prompt", "")
-        elif dataset_name == "gsm8k":
-            q = item.get("question", "").strip()
-            a = item.get("answer", "").strip()
-            text = f"{q}\n{a}" if (q or a) else ""
-        else:
-            text = ""
-
+        text = extractor(item)
         if not text or not text.strip():
             continue
 

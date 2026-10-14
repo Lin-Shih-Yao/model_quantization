@@ -13,8 +13,8 @@
 ### 核心五模組自動化量化管線架構
 專案已將量化與評估解耦為五大獨立模組，由控制器全自動調度：
 1. **[模組 1] `src/data/loader.py`**：多領域校準資料抽取（WikiText-2, C4, HumanEval, GSM8K，統一切割 2048 窗口，支援樣本 $N \in \{16, 128, 512\}$）。全域實驗配置位於 `configs/pipeline_config.py`。
-2. **[模組 2] `src/quantization/profiler.py`**：核心線性層（$Q, K, V, O$、Gate, Up, Down）激活值極值採集器（Forward Hook 攔截輸入張量最大值，統計每層 $X_{\max}$ 並輸出 JSON 檔）。
-3. **[模組 3] `src/quantization/fake_quant.py`**：Pre-Forward Hook 偽量化動態注入器（支援 $W16A8$ 與 $W16A4$，即時熱插拔，不破壞原始模型權重）。
+2. **[模組 2] `src/quantization/calibration.py`（與相容適配器 `profiler.py`）**：統一校準引擎（基於 `LayerObserver`，精準統計極值、99.99% 門檻截斷、通道峰值與 Symmetric/Asymmetric Scale，支援 `.pt` 與 `.json` 輸出）。
+3. **[模組 3] `src/quantization/fake_quant.py`**：Pre-Forward Hook 偽量化動態注入器（支援對稱量化與 99.99% Clipping，數值完全對齊真實 $W8A8Linear$；支援多格式 `.pt` / `.json` / 記憶體字典直讀，即時熱插拔）。
 4. **[模組 4] `src/eval/ppl.py`**：官方標準 2048 窗口滑動困惑度（PPL）評估，並具備防斷線成效日誌（`log_result_to_csv`）。
 5. **[模組 5] `scripts/run_pipeline.py`**：全矩陣調度主控制器（讀取 `configs/pipeline_config.py`，自動輪巡 `[Models] × [Datasets] × [N] × [Bits]`，具備 Dry Run 模式、雙節點防撞與顯存強制回收）。
 
@@ -35,6 +35,8 @@
 - **當前重點任務**：在 Colab GPU 上執行五模組自動化矩陣評估管線，採集多模型在多領域校準資料（WikiText-2, C4, GSM8K, HumanEval）下的偽量化（W16A8、W16A4）PPL 表現。
 
 ### 3. 最近完成的 Code Review 重構重點（Colab 請特別注意！）
+- **校準與量化策略對齊統一**：Fake Quant 偽量化算子全面對齊實體 W8A8 的對稱截斷（Symmetric with 99.99% Clipping）；校準器全面收斂至 `LayerObserver` 與 `collect_calibration_stats()`，廢除重複的 Hook 代碼，實現真實模組替換與模擬偽量化的無縫統一。
+- **資料模組統一與策略映射**：校準資料集載入整合至 `src/data/loader.py`，採用 Strategy Pattern 字典映射查表，並將全域設定抽離至 `configs/pipeline_config.py`。
 - **下載腳本整合**：所有模型下載統一由 [`scripts/download_model.py`](file:///Users/wanghuiyu/Desktop/model_quantization/scripts/download_model.py) 處理（支援單一模型、`--all` 全量下載、`--models` 自訂清單）。
 - **離線校準腳本更名**：已重新命名為 [`scripts/run_calibration.py`](file:///Users/wanghuiyu/Desktop/model_quantization/scripts/run_calibration.py)（原 `calibrate.py` 已廢棄）。
 - **移除薄包裝腳本**：`scripts/evaluate_ppl.py` 與 `scripts/profile_matrix.py` 已刪除，單獨評估請使用 Python 標準模組指令：

@@ -68,16 +68,26 @@ class LayerObserver:
         zero_point = max(0, min(q_max, zero_point))
         return scale, zero_point
 
+    def compute_channel_sym_scale(self, bits: int = 8) -> torch.Tensor | None:
+        """計算通道對稱量化 Scale: S_c = channel_abs_max / (2^(b-1) - 1)。"""
+        if self.channel_abs_max is None:
+            return None
+        q_max = (1 << (bits - 1)) - 1
+        return torch.clamp(self.channel_abs_max, min=1e-8) / q_max
+
     def to_dict(self) -> dict:
         """將此層所有統計與各精度量化參數打包為標準字典。"""
         int8_s_scale = self.compute_sym_scale(bits=8)
         int4_s_scale = self.compute_sym_scale(bits=4)
         int8_a_scale, int8_a_zp = self.compute_asym_scale_zp(bits=8)
         int4_a_scale, int4_a_zp = self.compute_asym_scale_zp(bits=4)
+        int8_ch_s_scale = self.compute_channel_sym_scale(bits=8)
 
         return {
             "layer_name": self.name,
             "sample_count": self.sample_count,
+            "min": self.min_val,
+            "max": self.max_val,
             "min_val": self.min_val,
             "max_val": self.max_val,
             "abs_max": self.abs_max,
@@ -90,5 +100,6 @@ class LayerObserver:
                 "int8_asym_zp": int8_a_zp,
                 "int4_asym_scale": int4_a_scale,
                 "int4_asym_zp": int4_a_zp,
+                "int8_channel_sym_scale": int8_ch_s_scale,
             },
         }

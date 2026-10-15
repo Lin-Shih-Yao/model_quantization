@@ -164,6 +164,7 @@ def calibrate_model(
     tokenizer,
     device: str,
     model_id: str = "custom_model",
+    dataset_name: str = "wikitext2",
     n_samples: int = 128,
     seq_len: int = 2048,
     output_path: str | None = None,
@@ -172,10 +173,11 @@ def calibrate_model(
     """
     統一校準主函式：串接資料集準備、Hook 掛載、前向傳播與結果保存。
     """
-    output_file = output_path or f"./calibration_results/calib_{model_id.replace('/', '_')}.pt"
+    clean_model_name = model_id.replace('/', '_')
+    output_file = output_path or f"./calibration_results/calib_{clean_model_name}_{dataset_name}.pt"
 
     # 1. 準備校準資料
-    samples = get_calib_dataset(tokenizer, n_samples=n_samples, seq_len=seq_len)
+    samples = get_calib_dataset(tokenizer, dataset_name=dataset_name, n_samples=n_samples, seq_len=seq_len)
 
     # 2. 探測目標層並掛載 Hook
     target_modules = find_target_linear_modules(model)

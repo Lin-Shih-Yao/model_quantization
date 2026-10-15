@@ -67,15 +67,42 @@ drive.mount('/content/drive')
 ### 步驟 3：選擇執行模式
 
 #### 🚀 模式 A（推薦）：執行五模組全自動量化矩陣管線
-> **說明**：自動進行極值採集、動態注入偽量化 Pre-Hook、計算 PPL，並即時將結果寫入 Google Drive 中的 `/content/drive/MyDrive/results_Node_A.csv`，每輪結束自動釋放 VRAM。
+> **說明**：自動進行各領域資料校準採集、動態注入偽量化 Pre-Hook、計算標準 PPL，並即時將結果寫入 Google Drive 中的 `/content/drive/MyDrive/results_Node_A.csv`，每輪結束自動釋放 VRAM。
 
 ```bash
-# 1. 極速乾跑測試 (Dry Run: 1 款模型, 16 樣本, 5 步 PPL, 驗證流程暢通約 1 分鐘)
+# 1. 極速乾跑測試 (Dry Run: 1 款模型, 16 樣本, 5 步 PPL, 驗證環境與資料集暢通約 30 秒)
 !python scripts/run_pipeline.py
 
-# 2. 正式全量評估 (依據 CONFIG 設定跑完整矩陣)
-!python -c "from scripts.run_pipeline import main; main(test_mode=False)"
+# 2. 正式全量評估 (依據 CONFIG 設定跑完整矩陣: 4 大資料集 × 3 種樣本數 × 2 種位元)
+!python scripts/run_pipeline.py --full
+
+# 3. 雙開節點分工：按「資料集領域」拆分 (推薦！)
+# 節點 A 專跑通用語言語料 (WikiText-2 + C4)
+!python scripts/run_pipeline.py --full --node Node_A --datasets wikitext2 c4
+
+# 節點 B 專跑數學推理與程式碼 (GSM8K + HumanEval)
+!python scripts/run_pipeline.py --full --node Node_B --datasets gsm8k humaneval
+
+# 4. 雙開節點分工：按「模型」拆分
+!python scripts/run_pipeline.py --full --node Node_A --models meta-llama/Llama-3.2-1B-Instruct meta-llama/Llama-3.2-3B-Instruct
+!python scripts/run_pipeline.py --full --node Node_B --models Qwen/Qwen3.5-2B Qwen/Qwen3.5-4B
 ```
+
+---
+
+### 📚 多資料集在校準（Calibration）與評估（Evaluation）的角色分配
+
+| 資料集名稱 | 領域定位 (Domain) | 校準端用途 (Calibration) | 評估端用途 (Evaluation) |
+| :--- | :--- | :--- | :--- |
+| **WikiText-2** | 高品質百科文章 | 採集標準通用文本激活分佈 (N=16/128/512) | **官方學術黃金基準** (2048 窗口 PPL 評分) |
+| **C4** | 真實網絡多樣語料 | 採集真實網絡多樣離群值分佈 | 跨領域泛化基準測試 |
+| **GSM8K** | 小學數學多步推理 | 採集高密度邏輯符號與長推理鏈尖刺 | 邏輯任務困惑度與敏感度評估 |
+| **HumanEval** | Python 演算法程式碼 | 採集程式語法結構與縮排特殊模式 | 程式碼合成場景量化損耗評估 |
+
+> 💡 **核心實驗理念**：  
+> 我們透過在不同領域（`wikitext2`, `c4`, `gsm8k`, `humaneval`）進行校準獲得該領域專屬的量化 Scales，再以統一的國際標準（WikiText-2 Test PPL）橫向比對，即可精確衡量**「不同領域校準語料對量化模型通用表現的泛化能力（Cross-Domain Generalization）」**！
+
+---
 
 #### 📦 模式 B：批次下載模型至 Google Drive 或本地
 ```bash
@@ -83,9 +110,19 @@ drive.mount('/content/drive')
 !python scripts/download_model.py --all --save_dir /content/drive/MyDrive/models
 ```
 
-#### 🔬 模式 C：單獨執行離線校準 (Activation Calibration)
+#### 🔬 模式 C：單獨執行多領域離線校準 (Activation Calibration 產出 .pt)
 ```bash
-!python scripts/run_calibration.py --model_id Qwen/Qwen3.5-2B --output_dir /content/drive/MyDrive/model_quantization/calibration_results
+# 1. 抽取 WikiText-2 校準並輸出 .pt 快取
+!python scripts/run_calibration.py --model_id Qwen/Qwen3.5-2B --dataset wikitext2 --output_dir /content/drive/MyDrive/model_quantization/calibration_results
+
+# 2. 抽取 C4 網絡語料校準
+!python scripts/run_calibration.py --model_id Qwen/Qwen3.5-2B --dataset c4 --output_dir /content/drive/MyDrive/model_quantization/calibration_results
+
+# 3. 抽取 GSM8K 數學推理校準
+!python scripts/run_calibration.py --model_id Qwen/Qwen3.5-2B --dataset gsm8k --output_dir /content/drive/MyDrive/model_quantization/calibration_results
+
+# 4. 抽取 HumanEval 程式碼校準
+!python scripts/run_calibration.py --model_id Qwen/Qwen3.5-2B --dataset humaneval --output_dir /content/drive/MyDrive/model_quantization/calibration_results
 ```
 
 #### 📊 模式 D：單獨快速測試特定模型 PPL
@@ -103,3 +140,24 @@ drive.mount('/content/drive')
    在長序列（2048 Context Length）評估時，嚴禁在全域變數長時間駐留多個 Model 或 Large Tensor。每次評估結束務必呼叫 `del model`、`torch.cuda.empty_cache()` 與 `gc.collect()`。
 3. **成績單保護原則**：
    所有量化成績單一律記錄至 CSV（檔案路徑優先採用 `/content/drive/MyDrive/results_{node_name}.csv`），以防 Colab 因執行逾時（Timeout）斷線遺失數據。
+
+---
+
+## 🗺️ 五、 專案階段任務與 Colab 研發路徑規劃 (Roadmap)
+
+本專案在 `README.md` 與實驗設計上明確規劃為兩大階段：
+
+### 📌 第一階段任務（當前 Colab 執行中）：多領域資料集 × 多模型 × 多精度基準矩陣
+- **核心目標**：完成主流開源端側模型（Llama 3.2 1B/3B, Qwen 3.5 2B/4B, Gemma 2）在不同校準領域（WikiText-2, C4, GSM8K, HumanEval）與樣本規模（$N \in \{16, 128, 512\}$）下的量化基準表現。
+- **評估維度**：未量化 BF16 Baseline、實體 W8A16、偽量化 W16A8、偽量化 W16A4。
+- **研究意義**：探索不同領域校準語料對量化模型的泛化能力（Cross-Domain Generalization），找出標準 PTQ 在極限低位元（A4）下的崩潰臨界點。
+- **Colab 執行方式**：直接執行本手冊之 **【模式 A】`scripts/run_pipeline.py --full`**（支援雙節點 Node_A / Node_B 平行加速）。
+
+### 🔬 第二階段任務（後續研發與評估重點）：進階正交旋轉量化技術 (SpinQuant / QuaRot)
+- **核心目標**：解決第一階段在 W4A4 / W16A4 遇到的激活異常尖刺（Outlier Spikes）導致 PPL 暴衝問題。
+- **技術架構規劃**：
+  1. **正交變換模組**：實作 Walsh-Hadamard Transform (WHT) 與基於 Cayley 變換之可學習正交旋轉矩陣 $R$（滿足 $R^T R = I$）。
+  2. **特徵空間旋轉**：在 Attention（$Q, K, V, O$）與 MLP（Gate, Up, Down）線性投影前注入旋轉矩陣，將能量集中在少數通道的極端離群值平滑分散到所有維度。
+  3. **極限低位元量化**：建構真正的 W4A4、W4A8 與 W3A3 偽量化與實體量化算子。
+  4. **消融對比實驗 (Ablation Benchmark)**：在 Colab 上全面評估 `標準 PTQ (No Rotation)` vs `QuaRot (Hadamard)` vs `SpinQuant (Optimal Rotation)` 在極限精度下的困惑度恢復效果。
+

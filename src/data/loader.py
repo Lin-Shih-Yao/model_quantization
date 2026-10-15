@@ -63,33 +63,37 @@ def get_calibration_dataloader(
         except Exception:
             dataset = load_dataset("openai/openai_humaneval", split="test")
     elif dataset_name == "gsm8k":
-        dataset = load_dataset("gsm8k", "main", split="train")
+        try:
+            dataset = load_dataset("openai/gsm8k", "main", split="train")
+        except Exception:
+            dataset = load_dataset("gsm8k", "main", split="train")
 
     samples: list[torch.Tensor] = []
-    min_len = seq_len // 2
-    pad_id = tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id
+    token_buffer: list[int] = []
     extractor = TEXT_EXTRACTORS[dataset_name]
+    dataset_iter = iter(dataset)
+    max_retries = n_samples * 250
+    retries = 0
 
-    for item in dataset:
+    while len(samples) < n_samples and retries < max_retries:
+        try:
+            item = next(dataset_iter)
+        except StopIteration:
+            dataset_iter = iter(dataset)
+            item = next(dataset_iter)
+        retries += 1
+
         text = extractor(item)
         if not text or not text.strip():
             continue
 
-        tokens = tokenizer(text, truncation=True, max_length=seq_len, return_tensors="pt")
-        cur_len = tokens.input_ids.shape[1]
-        if cur_len < min_len:
-            continue
+        item_tokens = tokenizer.encode(text, add_special_tokens=False)
+        token_buffer.extend(item_tokens)
 
-        input_ids = tokens.input_ids
-        if cur_len < seq_len and pad_id is not None:
-            pad = torch.full((1, seq_len - cur_len), pad_id, dtype=input_ids.dtype)
-            input_ids = torch.cat([input_ids, pad], dim=1)
-        elif cur_len < seq_len:
-            continue  # 若無可用 pad_id 且未達 seq_len 則跳過
-
-        samples.append(input_ids)
-        if len(samples) >= n_samples:
-            break
+        while len(token_buffer) >= seq_len and len(samples) < n_samples:
+            chunk = torch.tensor([token_buffer[:seq_len]], dtype=torch.long)
+            samples.append(chunk)
+            token_buffer = token_buffer[seq_len:]
 
     if len(samples) < n_samples:
         raise RuntimeError(f"資料集 '{dataset_name}' 樣本不足，僅收集到 {len(samples)}/{n_samples} 筆。")

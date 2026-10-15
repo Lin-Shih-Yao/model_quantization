@@ -38,6 +38,13 @@ def parse_args():
         help="Directory to save calibration .pt checkpoint",
     )
     parser.add_argument(
+        "--dataset",
+        type=str,
+        default="wikitext2",
+        choices=["wikitext2", "c4", "humaneval", "gsm8k"],
+        help="Calibration dataset domain (default: wikitext2)",
+    )
+    parser.add_argument(
         "--n_samples",
         type=int,
         default=128,
@@ -65,10 +72,10 @@ def parse_args():
     return parser.parse_args()
 
 
-def build_output_path(output_dir: str, model_id: str) -> str:
+def build_output_path(output_dir: str, model_id: str, dataset_name: str = "wikitext2") -> str:
     """產出結構化之 .pt 快取存檔路徑。"""
     clean_name = model_id.strip("/").replace("/", "_")
-    return os.path.join(output_dir, f"calib_{clean_name}.pt")
+    return os.path.join(output_dir, f"calib_{clean_name}_{dataset_name}.pt")
 
 
 def main():
@@ -76,7 +83,7 @@ def main():
     args = parse_args()
     device = get_optimal_device()
     resolved_path = resolve_model_path(args.model_id)
-    output_path = build_output_path(args.output_dir, args.model_id)
+    output_path = build_output_path(args.output_dir, args.model_id, args.dataset)
 
     dtype_map = {
         "bfloat16": torch.bfloat16,
@@ -87,6 +94,7 @@ def main():
     print("=" * 68)
     print("🎯 大語言模型激活值校準系統 (Activation Calibration Pipeline)")
     print(f"  • Target Model   : {resolved_path}")
+    print(f"  • Calibration DS : {args.dataset.upper()}")
     print(f"  • Device         : {device.upper()}")
     print(f"  • Sample Config  : {args.n_samples} samples × {args.seq_len} tokens")
     print(f"  • Clip Quantile  : {args.clip_quantile * 100:.2f}% (Outlier Suppression)")
@@ -106,6 +114,7 @@ def main():
         tokenizer=tokenizer,
         device=device,
         model_id=args.model_id,
+        dataset_name=args.dataset,
         n_samples=args.n_samples,
         seq_len=args.seq_len,
         output_path=output_path,

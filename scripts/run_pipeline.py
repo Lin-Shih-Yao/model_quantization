@@ -8,6 +8,7 @@ Features:
 - Strict VRAM survival cleanup after every bit and every model
 """
 
+import argparse
 import gc
 import os
 import sys
@@ -27,7 +28,12 @@ from src.eval.ppl import evaluate_ppl, log_result_to_csv
 from src.models.loader import load_pure_text_model_and_tokenizer, resolve_model_path
 
 
-def main(test_mode: bool = False):
+def main(
+    test_mode: bool = False,
+    node_override: str | None = None,
+    models_override: list[str] | None = None,
+    datasets_override: list[str] | None = None,
+):
     """
     主控制器函式：依序執行全流程矩陣實驗，並嚴格管控顯存與防斷線存檔。
     """
@@ -44,17 +50,17 @@ def main(test_mode: bool = False):
         print("  • PPL 步數: max_steps=5")
         print("=" * 70 + "\n")
 
-        default_model = CONFIG["models"][0] if CONFIG["models"] else "meta-llama/Llama-3.2-1B-Instruct"
+        default_model = models_override[0] if models_override else (CONFIG["models"][0] if CONFIG["models"] else "meta-llama/Llama-3.2-1B-Instruct")
         models_to_run = [default_model]
-        datasets_to_run = ["wikitext2"]
+        datasets_to_run = datasets_override or ["wikitext2"]
         n_samples_to_run = [16]
         bits_to_run = [8]
         max_steps = 5
     else:
-        models_to_run = CONFIG["models"]
+        models_to_run = models_override or CONFIG["models"]
         if not models_to_run:
             raise ValueError("❌ CONFIG['models'] 為空！請填入至少一個待測模型名稱。")
-        datasets_to_run = CONFIG["datasets"]
+        datasets_to_run = datasets_override or CONFIG["datasets"]
         n_samples_to_run = CONFIG["N_samples"]
         bits_to_run = CONFIG["bits"]
         max_steps = 250
@@ -62,7 +68,7 @@ def main(test_mode: bool = False):
     # --------------------------------------------------------------------------
     # 2. 全域與環境設定
     # --------------------------------------------------------------------------
-    node_name = CONFIG.get("node_name", "Node_A")
+    node_name = node_override or CONFIG.get("node_name", "Node_A")
     seq_len = CONFIG.get("seq_len", 2048)
 
     # 決定成績單 CSV 路徑 (支援 Google Drive 與本地目錄)
@@ -173,9 +179,32 @@ def main(test_mode: bool = False):
     print("=" * 70 + "\n")
 
 
+def parse_args():
+    """解析 CLI 執行參數。"""
+    parser = argparse.ArgumentParser(description="LLM Quantization Benchmark Matrix Pipeline")
+    parser.add_argument("--full", action="store_true", help="執行正式全量評估矩陣 (預設為 test_mode 乾跑)")
+    parser.add_argument("--test_mode", action="store_true", help="強制以極速測試模式執行 (N=16, steps=5)")
+    parser.add_argument("--node", type=str, default=None, help="覆寫節點名稱 (例如 Node_A, Node_B)")
+    parser.add_argument("--models", nargs="+", default=None, help="覆寫欲評估之模型清單")
+    parser.add_argument(
+        "--datasets",
+        nargs="+",
+        default=None,
+        choices=["wikitext2", "c4", "humaneval", "gsm8k"],
+        help="覆寫欲評估之校準資料集清單 (例如 wikitext2 c4)",
+    )
+    return parser.parse_args()
+
+
 # ==============================================================================
 # 執行區塊
 # ==============================================================================
 if __name__ == "__main__":
-    # 預設啟動極速乾跑測試模式 (驗證流程 100% 暢通)
-    main(test_mode=True)
+    args = parse_args()
+    is_test = False if args.full else True
+    main(
+        test_mode=is_test,
+        node_override=args.node,
+        models_override=args.models,
+        datasets_override=args.datasets,
+    )

@@ -33,6 +33,7 @@ def main(
     node_override: str | None = None,
     models_override: list[str] | None = None,
     datasets_override: list[str] | None = None,
+    max_steps_override: int | None = None,
 ):
     """
     主控制器函式：依序執行全流程矩陣實驗，並嚴格管控顯存與防斷線存檔。
@@ -55,7 +56,7 @@ def main(
         datasets_to_run = datasets_override or ["wikitext2"]
         n_samples_to_run = [16]
         bits_to_run = [8]
-        max_steps = 5
+        max_steps = max_steps_override or 5
     else:
         models_to_run = models_override or CONFIG["models"]
         if not models_to_run:
@@ -63,7 +64,7 @@ def main(
         datasets_to_run = datasets_override or CONFIG["datasets"]
         n_samples_to_run = CONFIG["N_samples"]
         bits_to_run = CONFIG["bits"]
-        max_steps = 250
+        max_steps = max_steps_override or CONFIG.get("max_steps", 40)
 
     # --------------------------------------------------------------------------
     # 2. 全域與環境設定
@@ -193,6 +194,12 @@ def parse_args():
         choices=["wikitext2", "c4", "humaneval", "gsm8k"],
         help="覆寫欲評估之校準資料集清單 (例如 wikitext2 c4)",
     )
+    parser.add_argument(
+        "--max_steps",
+        type=int,
+        default=None,
+        help="覆寫 PPL 評估步數 (預設 40 步約 40 分鐘；250 步約 4.5 小時)",
+    )
     return parser.parse_args()
 
 
@@ -207,4 +214,5 @@ if __name__ == "__main__":
         node_override=args.node,
         models_override=args.models,
         datasets_override=args.datasets,
+        max_steps_override=args.max_steps,
     )

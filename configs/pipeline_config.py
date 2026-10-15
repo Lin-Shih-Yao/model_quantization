@@ -12,4 +12,6 @@ CONFIG = {
     "N_samples": [16, 128, 512],
     "bits": [8, 4],
     "seq_len": 2048,
+    "max_steps": 40,
 }
+

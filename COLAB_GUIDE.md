@@ -73,8 +73,12 @@ drive.mount('/content/drive')
 # 1. 極速乾跑測試 (Dry Run: 1 款模型, 16 樣本, 5 步 PPL, 驗證環境與資料集暢通約 30 秒)
 !python scripts/run_pipeline.py
 
-# 2. 正式全量評估 (依據 CONFIG 設定跑完整矩陣: 4 大資料集 × 3 種樣本數 × 2 種位元)
+# 2. 正式矩陣評估 (4 大資料集 × 3 種樣本數 × 2 種位元 = 24 組評估)
+# 預設 max_steps=40 快速篩選 (推薦！單台 T4 總耗時約 35~40 分鐘，安全不超時):
 !python scripts/run_pipeline.py --full
+
+# 若欲執行 250 步深度評估 (單台 T4 需約 4.5 小時，強烈建議雙開分工):
+!python scripts/run_pipeline.py --full --max_steps 250
 
 # 3. 雙開節點分工：按「資料集領域」拆分 (推薦！)
 # 節點 A 專跑通用語言語料 (WikiText-2 + C4)

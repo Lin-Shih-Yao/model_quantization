@@ -14,7 +14,7 @@ import os
 import sys
 import torch
 
-# 確保專案根目錄在 sys.path 中
+# Ensure repository root is in python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from configs import CONFIG
@@ -36,19 +36,20 @@ def main(
     max_steps_override: int | None = None,
 ):
     """
-    主控制器函式：依序執行全流程矩陣實驗，並嚴格管控顯存與防斷線存檔。
+    Main controller function: executes matrix benchmark experiments, enforces VRAM management,
+    and logs crash-resilient results to CSV.
     """
     # --------------------------------------------------------------------------
-    # 1. 測試模式攔截 (Dry Run 機制)
+    # 1. Test Mode Interception (Dry Run Mechanism)
     # --------------------------------------------------------------------------
     if test_mode:
         print("\n" + "=" * 70)
-        print("🧪 目前為 Test Mode，僅進行極速乾跑測試...")
-        print("  • 模型數量: 1 款")
-        print("  • 測試資料: wikitext2")
-        print("  • 樣本數量: N=16")
-        print("  • 量化位元: [8]")
-        print("  • PPL 步數: max_steps=5")
+        print("🧪 Running in Test Mode (Fast Dry-Run)...")
+        print("  • Model Count  : 1 model")
+        print("  • Dataset      : wikitext2")
+        print("  • Samples      : N=16")
+        print("  • Quant Bits   : [8]")
+        print("  • PPL Steps    : max_steps=5")
         print("=" * 70 + "\n")
 
         default_model = models_override[0] if models_override else (CONFIG["models"][0] if CONFIG["models"] else "meta-llama/Llama-3.2-1B-Instruct")
@@ -60,19 +61,19 @@ def main(
     else:
         models_to_run = models_override or CONFIG["models"]
         if not models_to_run:
-            raise ValueError("❌ CONFIG['models'] 為空！請填入至少一個待測模型名稱。")
+            raise ValueError("❌ CONFIG['models'] is empty! Please configure at least one model ID.")
         datasets_to_run = datasets_override or CONFIG["datasets"]
         n_samples_to_run = CONFIG["N_samples"]
         bits_to_run = CONFIG["bits"]
         max_steps = max_steps_override or CONFIG.get("max_steps", 40)
 
     # --------------------------------------------------------------------------
-    # 2. 全域與環境設定
+    # 2. Global & Environment Configuration
     # --------------------------------------------------------------------------
     node_name = node_override or CONFIG.get("node_name", "Node_A")
     seq_len = CONFIG.get("seq_len", 2048)
 
-    # 決定成績單 CSV 路徑 (支援 Google Drive 與本地目錄)
+    # Resolve CSV output path (supports Google Drive and local paths)
     if os.path.exists("/content/drive/MyDrive"):
         csv_log_path = f"/content/drive/MyDrive/results_{node_name}.csv"
     else:
@@ -81,15 +82,15 @@ def main(
     device = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
     dtype = torch.float16 if device == "cuda" else torch.float32
 
-    print(f"🖥️ 執行節點: {node_name} | 硬體設備: {device.upper()} | 精度: {dtype}")
-    print(f"📊 成績單將記錄至: {csv_log_path}\n")
+    print(f"🖥️ Execution Node: {node_name} | Device: {device.upper()} | Precision: {dtype}")
+    print(f"📊 Results will be persisted to: {csv_log_path}\n")
 
     # --------------------------------------------------------------------------
-    # 3. 核心迴圈架構 (Models -> Datasets -> N -> Bits)
+    # 3. Core Matrix Execution Loops (Models -> Datasets -> N -> Bits)
     # --------------------------------------------------------------------------
     for model_id in models_to_run:
         print(f"\n{'='*70}")
-        print(f"🚀 [載入模型] {model_id} ...")
+        print(f"🚀 [Loading Target Model] {model_id} ...")
         print(f"{'='*70}")
 
         resolved_path = resolve_model_path(model_id)
@@ -103,9 +104,9 @@ def main(
         for dataset_name in datasets_to_run:
             for n in n_samples_to_run:
                 # --------------------------------------------------------------
-                # (a) 收集極值：呼叫模組 1 取得資料 -> 呼叫模組 2 收集並存檔
+                # (a) Harvest Layer Extrema: Module 1 -> Module 2 -> Save JSON
                 # --------------------------------------------------------------
-                print(f"\n🔍 [極值收集] 模型: {model_id} | 資料集: {dataset_name} | N={n} ...")
+                print(f"\n🔍 [Harvesting Extrema] Model: {model_id} | Dataset: {dataset_name} | N={n} ...")
                 calib_tensor = get_calibration_dataloader(
                     tokenizer=tokenizer,
                     dataset_name=dataset_name,
@@ -116,7 +117,7 @@ def main(
                 layer_stats = collect_calibration_stats(model, calib_tensor, device=device)
                 del calib_tensor
 
-                # 存檔為 JSON (檔名內含 node_name 防撞)
+                # Save JSON stats (filename includes node_name for multi-node safety)
                 save_calibration_stats_json(
                     stats=layer_stats,
                     model_name=model_id,
@@ -127,10 +128,10 @@ def main(
 
                 for bit in bits_to_run:
                     bit_str = f"W16A{bit}"
-                    print(f"\n🧪 [偽量化評估] 注入 {bit_str} (N={n}, {dataset_name}) | max_steps={max_steps} ...")
+                    print(f"\n🧪 [Fake-Quant Evaluation] Injecting {bit_str} (N={n}, {dataset_name}) | max_steps={max_steps} ...")
 
                     # ----------------------------------------------------------
-                    # (b) 偽量化與評估：注入 Pre-Hook -> 計算 PPL -> 寫入 CSV
+                    # (b) Emulation & Evaluation: Inject Pre-Hook -> Compute PPL -> Log CSV
                     # ----------------------------------------------------------
                     fake_quantizer.attach(model, layer_stats, bits=bit)
 
@@ -155,7 +156,7 @@ def main(
                     )
 
                     # ----------------------------------------------------------
-                    # (c) VRAM 保命清理：立刻卸載 Hook，清空顯存快取
+                    # (c) VRAM Survival Cleanup: Detach Hook & Purge Accelerator Cache
                     # ----------------------------------------------------------
                     fake_quantizer.detach()
                     if torch.cuda.is_available():
@@ -164,47 +165,47 @@ def main(
                         torch.mps.empty_cache()
                     gc.collect()
 
-        # 該模型全數測完後，從記憶體徹底刪除 model 與 tokenizer
-        print(f"\n🧹 [模型結束清理] 徹底釋放 {model_id} 之顯存與物件...")
+        # Cleanly delete model and tokenizer when model matrix finishes
+        print(f"\n🧹 [Model Lifecycle Teardown] Reclaiming memory for {model_id}...")
         del model, tokenizer, fake_quantizer
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         elif torch.backends.mps.is_available():
             torch.mps.empty_cache()
         gc.collect()
-        print("✨ 顯存已徹底還原乾淨，準備載入下一個模型。\n")
+        print("✨ VRAM reset cleanly. Ready for next model.\n")
 
     print("\n" + "=" * 70)
-    print("🎉 [Pipeline 執行完畢] 所有矩陣實驗已成功歸檔！")
-    print(f"📊 完整成績單請查看: {csv_log_path}")
+    print("🎉 [Pipeline Complete] All matrix benchmarks evaluated and persisted!")
+    print(f"📊 Detailed scorecard: {csv_log_path}")
     print("=" * 70 + "\n")
 
 
 def parse_args():
-    """解析 CLI 執行參數。"""
+    """Parses CLI arguments."""
     parser = argparse.ArgumentParser(description="LLM Quantization Benchmark Matrix Pipeline")
-    parser.add_argument("--full", action="store_true", help="執行正式全量評估矩陣 (預設為 test_mode 乾跑)")
-    parser.add_argument("--test_mode", action="store_true", help="強制以極速測試模式執行 (N=16, steps=5)")
-    parser.add_argument("--node", type=str, default=None, help="覆寫節點名稱 (例如 Node_A, Node_B)")
-    parser.add_argument("--models", nargs="+", default=None, help="覆寫欲評估之模型清單")
+    parser.add_argument("--full", action="store_true", help="Execute full benchmark matrix (defaults to dry-run test mode)")
+    parser.add_argument("--test_mode", action="store_true", help="Force fast test mode (N=16, steps=5)")
+    parser.add_argument("--node", type=str, default=None, help="Override node name (e.g. Node_A, Node_B)")
+    parser.add_argument("--models", nargs="+", default=None, help="Override target models list")
     parser.add_argument(
         "--datasets",
         nargs="+",
         default=None,
         choices=["wikitext2", "c4", "humaneval", "gsm8k"],
-        help="覆寫欲評估之校準資料集清單 (例如 wikitext2 c4)",
+        help="Override calibration datasets list (e.g. wikitext2 c4)",
     )
     parser.add_argument(
         "--max_steps",
         type=int,
         default=None,
-        help="覆寫 PPL 評估步數 (預設 40 步約 40 分鐘；250 步約 4.5 小時)",
+        help="Override sliding PPL steps (e.g. 40 steps ~ 40 min; 250 steps ~ 4.5 hrs)",
     )
     return parser.parse_args()
 
 
 # ==============================================================================
-# 執行區塊
+# Execution Entrypoint
 # ==============================================================================
 if __name__ == "__main__":
     args = parse_args()

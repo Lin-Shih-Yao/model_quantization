@@ -9,8 +9,8 @@ import torch
 
 class LayerObserver:
     """
-    專門監控單一神經網路層輸入特徵（Activation）數值分佈的觀察器。
-    每項計算函數均保持精簡（20 行以內），職責單一易讀。
+    Dedicated observer monitoring input activation tensors of a single neural network layer.
+    Maintains clean, single-responsibility methods under 20 lines each.
     """
 
     def __init__(self, name: str, clip_quantile: float = 0.9999):
@@ -24,14 +24,14 @@ class LayerObserver:
         self.sample_count: int = 0
 
     def hook_fn(self, module, inputs, outputs):
-        """Forward Hook 進入點：攔截輸入張量 X 並觸發統計更新。"""
+        """Forward Hook entrypoint: intercepts input tensor X and triggers statistics update."""
         if not inputs or inputs[0] is None:
             return
         x = inputs[0].detach()
         self.update(x)
 
     def update(self, tensor: torch.Tensor):
-        """更新當前批次特徵張量的極值、截斷值與通道峰值。"""
+        """Updates extrema, clipping quantiles, and channel maximums for the current feature batch."""
         feat = tensor.float()
         self.min_val = min(self.min_val, feat.min().item())
         self.max_val = max(self.max_val, feat.max().item())
@@ -39,11 +39,11 @@ class LayerObserver:
         cur_abs_max = feat.abs().max().item()
         self.abs_max = max(self.abs_max, cur_abs_max)
 
-        # 99.99% 分位數截斷，濾除深層極端離群尖刺
+        # 99.99% quantile clipping to isolate extreme deep-layer activation spikes
         q_val = torch.quantile(feat.abs(), self.clip_quantile).item()
         self.clip_max = max(self.clip_max, q_val)
 
-        # 追蹤通道最大值 (保留最後一個維度 in_features)
+        # Track channel maximums along the feature dimension (last dimension)
         ch_dims = list(range(feat.ndim - 1))
         batch_ch_max = feat.abs().amax(dim=ch_dims).cpu()
         if self.channel_abs_max is None:
@@ -54,13 +54,13 @@ class LayerObserver:
         self.sample_count += 1
 
     def compute_sym_scale(self, bits: int = 8) -> float:
-        """計算對稱量化 Scale: S = clip_max / (2^(b-1) - 1)。"""
+        """Computes symmetric scale: S = clip_max / (2^(b-1) - 1)."""
         q_max = (1 << (bits - 1)) - 1
         safe_max = max(self.clip_max, 1e-8)
         return safe_max / q_max
 
     def compute_asym_scale_zp(self, bits: int = 8) -> tuple[float, int]:
-        """計算非對稱量化 Scale 與 Zero Point。"""
+        """Computes asymmetric scale and zero point."""
         q_max = (1 << bits) - 1
         val_range = max(self.max_val - self.min_val, 1e-8)
         scale = val_range / q_max
@@ -69,14 +69,14 @@ class LayerObserver:
         return scale, zero_point
 
     def compute_channel_sym_scale(self, bits: int = 8) -> torch.Tensor | None:
-        """計算通道對稱量化 Scale: S_c = channel_abs_max / (2^(b-1) - 1)。"""
+        """Computes per-channel symmetric scale: S_c = channel_abs_max / (2^(b-1) - 1)."""
         if self.channel_abs_max is None:
             return None
         q_max = (1 << (bits - 1)) - 1
         return torch.clamp(self.channel_abs_max, min=1e-8) / q_max
 
     def to_dict(self) -> dict:
-        """將此層所有統計與各精度量化參數打包為標準字典。"""
+        """Exports layer statistics and precision scales into a standardized dictionary."""
         int8_s_scale = self.compute_sym_scale(bits=8)
         int4_s_scale = self.compute_sym_scale(bits=4)
         int8_a_scale, int8_a_zp = self.compute_asym_scale_zp(bits=8)

@@ -14,7 +14,7 @@ from src.quantization.calibration import (
 
 class CalibrationProfiler:
     """
-    輕量適配器：底層完全呼叫統一的 LayerObserver 校準引擎，消除重複的前向 Hook 邏輯。
+    Lightweight adapter delegating profiling calls to the unified LayerObserver calibration engine.
     """
 
     def __init__(self, clip_quantile: float = 0.9999):
@@ -28,7 +28,7 @@ class CalibrationProfiler:
         calib_tensor: torch.Tensor,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
     ) -> dict[str, dict]:
-        """呼叫統一校準引擎收集全層統計資料。"""
+        """Invokes unified calibration engine to harvest layer statistics."""
         self.layer_stats = collect_calibration_stats(
             model=model,
             samples=calib_tensor,

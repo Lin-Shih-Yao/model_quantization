@@ -17,7 +17,7 @@ from src.quantization.utils import (
 
 
 class W8A8Linear(nn.Module):
-    """自訂 W8A8 線性層：權重與激活值均以 INT8 精度運算（支援校準截斷與四捨五入）。"""
+    """Custom W8A8 Linear layer: performs matrix operations with INT8 weights and INT8 activations."""
 
     def __init__(
         self,
@@ -43,7 +43,7 @@ class W8A8Linear(nn.Module):
         act_scale: float = 1.0,
         act_clip_max: float | None = None,
     ) -> "W8A8Linear":
-        """轉換原生 nn.Linear 為 W8A8Linear，寫入 INT8 權重並設定激活值 Scale 與截斷值。"""
+        """Converts native nn.Linear into W8A8Linear, assigning INT8 weights and activation scale/clip parameters."""
         qlayer = cls(
             linear.in_features,
             linear.out_features,
@@ -60,7 +60,7 @@ class W8A8Linear(nn.Module):
         return qlayer
 
     def quantize_activation(self, x: torch.Tensor) -> torch.Tensor:
-        """對輸入特徵 A 進行 99.99% 門檻截斷 (Clipping) 與 INT8 四捨五入 (Rounding)。"""
+        """Applies 99.99% quantile clipping and symmetric INT8 rounding to activation feature X."""
         s_act = self.act_scale.to(device=x.device, dtype=x.dtype)
         if self.act_clip_max is not None:
             clip_bound = torch.tensor(self.act_clip_max, device=x.device, dtype=x.dtype)
@@ -71,7 +71,7 @@ class W8A8Linear(nn.Module):
         return x_q * s_act
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """前向推論：量化輸入 A、反量化權重 W，並對齊精度執行線性映射。"""
+        """Forward pass: quantizes activations, dequantizes weights, and executes linear projection."""
         x_dequant = self.quantize_activation(x)
         w_dequant = self.weight_int8.to(x.dtype) * self.weight_scales.to(x.dtype)
         bias = self.bias.to(x.dtype) if self.bias is not None else None
@@ -83,7 +83,7 @@ def replace_linear_modules_w8a8(
     calib_layers: dict,
     target_names: tuple = TARGET_MODULE_NAMES,
 ) -> int:
-    """遞迴走訪模型，匹配校準統計將目標 Linear 替換為 W8A8Linear。"""
+    """Recursively replaces targeted Linear modules with W8A8Linear matching calibration stats."""
     def factory(linear: nn.Linear, full_name: str) -> W8A8Linear:
         scale, clip_max = find_calib_scale_and_clip(calib_layers, full_name)
         return W8A8Linear.from_linear(linear, act_scale=scale, act_clip_max=clip_max)
@@ -96,8 +96,8 @@ def quantize_model_w8a8(
     calib_file: str | None = None,
     target_names: tuple = TARGET_MODULE_NAMES,
 ) -> nn.Module:
-    """統一量化入口：替換全模型 7 大核心線性層為 W8A8（支援激活值校準），保護 Embedding 與 lm_head。"""
+    """Unified entrypoint: replaces core linear projections with W8A8 while preserving Embeddings & Head."""
     calib_layers = load_calib_layers(calib_file)
     replaced_count = replace_linear_modules_w8a8(model, calib_layers, target_names=target_names)
-    print(f"✅ 成功將 {replaced_count} 個核心 Linear 模組替換為 W8A8 (INT8 權重 + INT8 激活)！")
+    print(f"✅ Successfully replaced {replaced_count} core Linear modules with W8A8 (INT8 weights + INT8 activations)!")
     return model

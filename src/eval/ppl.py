@@ -3,8 +3,8 @@ Perplexity (PPL) Evaluation Module for Causal Language Models.
 Directly implements Hugging Face's official Strided Sliding Window benchmark:
 Reference: https://huggingface.co/docs/transformers/perplexity
 
-Evaluates models on standard WikiText-2 test set with Apple Silicon MPS GPU acceleration,
-strict Context Label Masking (-100), and immediate per-step MPS memory cleanup.
+Evaluates models on standard WikiText-2 test set with hardware acceleration (CUDA / MPS),
+strict Context Label Masking (-100), and immediate per-step cache memory cleanup.
 """
 import argparse
 import csv
@@ -17,7 +17,7 @@ import torch
 from datasets import load_dataset
 from tqdm import tqdm
 
-# 關鍵防護：禁止 Apple Silicon MPS 囤積快取顯存，杜絕 macOS Kernel Panic 黑屏重開機
+# Prevent Apple Silicon MPS from hoarding cached unified memory
 os.environ.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.0")
 
 from src.models import (
@@ -38,13 +38,13 @@ def evaluate_ppl(
     dataset_split: str = "test",
 ) -> dict:
     """
-    計算 Causal LM 的 Perplexity (PPL) - 遵循 Hugging Face 官方標準 Strided Sliding Window 演算法。
+    Computes Perplexity (PPL) for Causal LMs following Hugging Face's official strided sliding window algorithm.
 
-    運作原理：
-      1. 窗口長度為 max_length (如 2048)，滑動步長為 stride (如 512)。
-      2. 前綴歷史上下文 (前 max_length - stride 個 tokens) 在 labels 中被設為 -100 (遮罩忽略)。
-      3. 只有最新跨進窗口的 trg_len (通常為 512) 個 tokens 會計算 CrossEntropyLoss。
-      4. 消除非重疊切塊的「上下文飢餓效應 (Context Starvation)」，獲得具國際公信力的黃金基準分。
+    Operational Mechanism:
+      1. Window length is max_length (e.g., 2048), sliding by stride (e.g., 512).
+      2. Historical prefix context (first max_length - stride tokens) is masked with -100 in labels.
+      3. Only newly shifted tokens (trg_len, typically 512) incur CrossEntropyLoss computation.
+      4. Eliminates non-overlapping chunk boundary distortion and context starvation.
 
     Returns:
         dict: {
@@ -55,43 +55,43 @@ def evaluate_ppl(
             "total_steps": int,
         }
     """
-    # 1. 載入標準測試集
+    # 1. Load benchmark dataset
     dataset = load_dataset(dataset_name, dataset_config, split=dataset_split)
     full_text = "\n\n".join([t for t in dataset["text"] if t.strip()])
 
-    # 2. 轉為 Token ID
+    # 2. Tokenize full corpus
     encodings = tokenizer(full_text, return_tensors="pt")
     seq_len = encodings.input_ids.size(1)
 
-    print(f"📖 資料集: {dataset_name}/{dataset_config} ({dataset_split})")
-    print(f"  • 資料集總 Token 數 : {seq_len:,}")
-    print(f"  • 最大窗口 (max_len) : {max_length}")
-    print(f"  • 滑動步長 (stride)  : {stride}")
+    print(f"📖 Dataset: {dataset_name}/{dataset_config} ({dataset_split})")
+    print(f"  • Total Corpus Tokens : {seq_len:,}")
+    print(f"  • Context Window      : {max_length}")
+    print(f"  • Sliding Stride      : {stride}")
 
     nlls = []
     prev_end_loc = 0
     step_count = 0
     start_time = time.time()
 
-    # 計算總步數供 tqdm 顯示
+    # Calculate total steps for progress bar
     total_possible_steps = (seq_len + stride - 1) // stride
     total_steps = min(total_possible_steps, max_steps) if max_steps else total_possible_steps
 
-    progress_bar = tqdm(total=total_steps, desc="官方標準 Strided PPL 評估")
+    progress_bar = tqdm(total=total_steps, desc="Strided Sliding-Window PPL")
 
     for begin_loc in range(0, seq_len, stride):
         end_loc = min(begin_loc + max_length, seq_len)
-        trg_len = end_loc - prev_end_loc  # 本次步長實際新增計分的 Token 數
+        trg_len = end_loc - prev_end_loc  # Newly scored target tokens
 
         input_ids = encodings.input_ids[:, begin_loc:end_loc].to(device)
         target_ids = input_ids.clone()
 
-        # 關鍵核心：將歷史上下文 tokens 遮罩為 -100，只有最新的 trg_len 個 tokens 計算損失
+        # Context label masking: history tokens masked to -100
         target_ids[:, :-trg_len] = -100
 
         with torch.no_grad():
             outputs = model(input_ids=input_ids, labels=target_ids)
-            # outputs.loss 是針對 labels != -100 的 token 的平均損失
+            # outputs.loss averages over labels != -100
             neg_log_likelihood = outputs.loss.item() * trg_len
             nlls.append(neg_log_likelihood)
 
@@ -99,7 +99,7 @@ def evaluate_ppl(
         step_count += 1
         progress_bar.update(1)
 
-        # 關鍵優化：每一步立即釋放暫存並強制清理 GPU 快取與垃圾回收，杜絕記憶體堆積
+        # Proactive memory reclamation per step
         del outputs, input_ids, target_ids
         if device == "mps":
             torch.mps.empty_cache()
@@ -107,11 +107,10 @@ def evaluate_ppl(
             torch.cuda.empty_cache()
         gc.collect()
 
-        # 關鍵防護：主動記憶體安全熔斷機制 (Safety Circuit Breaker)
-        # 若系統 RAM 使用率超過 85%，主動安全中斷評估並結算當前分數，絕對不讓 Mac 觸發 Kernel Panic 黑屏重開機！
+        # Safety Circuit Breaker: prevent host OOM panic if RAM usage exceeds 85%
         mem_percent = psutil.virtual_memory().percent
         if mem_percent > 85.0:
-            print(f"\n⚠️ [安全熔斷防護觸發] 系統記憶體使用率達 {mem_percent:.1f}% (>85%)，為保護 Mac 硬體避免黑屏，主動安全結束評估！")
+            print(f"\n⚠️ [Safety Circuit Breaker] System RAM reached {mem_percent:.1f}% (>85%). Aborting safely to protect host!")
             break
 
         if end_loc == seq_len or (max_steps and step_count >= max_steps):
@@ -142,7 +141,7 @@ def log_result_to_csv(
     bit_str: str,
     ppl_score: float,
 ):
-    """將單次實驗結果以 Append 模式安全寫入 CSV 檔案，若為空自動建立表頭。"""
+    """Safely appends single experiment result to CSV file with automatic header generation."""
     os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
     is_empty = not os.path.exists(log_path) or os.path.getsize(log_path) == 0
 
@@ -151,7 +150,7 @@ def log_result_to_csv(
         if is_empty:
             writer.writerow(["Node", "Model", "Calib_Dataset", "N_Samples", "A_Bit", "PPL"])
         writer.writerow([node_name, model_id, calib_dataset, n_samples, bit_str, f"{ppl_score:.4f}"])
-    print(f"📝 [成績單歸檔] {node_name} | {model_id} | {calib_dataset} | N={n_samples} | {bit_str} -> PPL: {ppl_score:.4f}")
+    print(f"📝 [Result Logged] {node_name} | {model_id} | {calib_dataset} | N={n_samples} | {bit_str} -> PPL: {ppl_score:.4f}")
 
 
 def parse_args():
@@ -240,29 +239,29 @@ def main():
         print(f"  • Max Steps    : Full Dataset Evaluation")
     print("=" * 68)
 
-    print("\n⏳ 正在安全載入模型結構至 GPU (MPS)...")
+    print("\n⏳ Loading model architecture and weights to hardware device...")
     load_start = time.time()
     model, tokenizer = load_pure_text_model_and_tokenizer(resolved_path, device, torch_dtype)
     load_time = time.time() - load_start
 
     ram_gb = psutil.Process().memory_info().rss / (1024 ** 3)
     num_params = sum(p.numel() for p in model.parameters()) / 1e9
-    print(f"✅ 模型與 Tokenizer 載入完成！")
-    print(f"  • 載入耗時 : {load_time:.2f} 秒")
-    print(f"  • 文字參數量 : {num_params:.2f} B ({num_params * 1000:.0f} M)")
-    print(f"  • 實體記憶體佔用 : ~{ram_gb:.2f} GB RAM")
+    print(f"✅ Model and Tokenizer successfully loaded!")
+    print(f"  • Loading Latency  : {load_time:.2f} s")
+    print(f"  • Text Parameters  : {num_params:.2f} B ({num_params * 1000:.0f} M)")
+    print(f"  • Physical Memory  : ~{ram_gb:.2f} GB RAM")
 
-    # 若指定量化方法，在評估前無縫套用量化層替換
+    # Seamless quantization layer replacement if specified
     if args.quant_method == "w8a16":
         from src.quantization import quantize_model_w8a16
-        print("\n⚙️ 正在套用 W8A16 核心層 INT8 量化...")
+        print("\n⚙️ Applying physical W8A16 INT8 linear replacement...")
         model = quantize_model_w8a16(model)
     elif args.quant_method == "w8a8":
         from src.quantization import quantize_model_w8a8
-        print("\n⚙️ 正在套用 W8A8 核心層 INT8 全量化 (結合激活值截斷)...")
+        print("\n⚙️ Applying physical W8A8 INT8 linear replacement (with calibrated clipping)...")
         model = quantize_model_w8a8(model, calib_file=args.calib_file)
 
-    # 執行官方標準 Strided Sliding Window PPL 評估
+    # Execute official standard Strided Sliding Window PPL evaluation
     results = evaluate_ppl(
         model,
         tokenizer,
@@ -274,15 +273,15 @@ def main():
 
     print("\n" + "=" * 68)
     if args.quant_method != "none":
-        print(f"📊 官方 WikiText-2 基準評估結果 [{args.quant_method.upper()} 量化]：")
+        print(f"📊 Official WikiText-2 Benchmark Results [{args.quant_method.upper()} Quantization]:")
     else:
-        print("📊 官方 WikiText-2 基準評估結果 (Official Benchmark Results)：")
+        print("📊 Official WikiText-2 Benchmark Results (FP16/BF16 Baseline):")
     print("-" * 68)
-    print(f"  🏆 WikiText-2 PPL (困惑度) : {results['ppl']:.4f} (越低越好)")
-    print(f"  ⚡ 評估總耗時              : {results['elapsed_sec']:.2f} 秒")
-    print(f"  🚀 處理吞吐量              : {results['tokens_per_sec']:.2f} tokens/秒")
-    print(f"  📝 累計評估 Token 數量     : {results['total_tokens']:,} tokens")
-    print(f"  🔄 執行滑動步數 (Steps)    : {results['total_steps']} 步")
+    print(f"  🏆 WikiText-2 PPL (Perplexity) : {results['ppl']:.4f} (Lower is better)")
+    print(f"  ⚡ Total Elapsed Time          : {results['elapsed_sec']:.2f} s")
+    print(f"  🚀 Processing Throughput       : {results['tokens_per_sec']:.2f} tokens/s")
+    print(f"  📝 Evaluated Corpus Tokens     : {results['total_tokens']:,} tokens")
+    print(f"  🔄 Sliding Steps Executed      : {results['total_steps']} steps")
     print("=" * 68)
 
 

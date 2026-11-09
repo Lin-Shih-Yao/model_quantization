@@ -1,21 +1,21 @@
-# 核心深度學習與模型架構
+# Core Deep Learning & Modeling Frameworks
 torch>=2.0.0
 transformers>=4.40.0
 accelerate>=0.28.0
 datasets>=2.18.0
 
-# Tokenizer 與多模態 Processor 依賴
+# Tokenizer & Multimodal Processor Dependencies
 protobuf>=3.20.0
 sentencepiece>=0.1.99
 
-# 旋轉矩陣與科學計算（第二階段 Hadamard / 正交變換核心）
+# Scientific Computing & Matrix Transformations (Phase 2 Verification)
 scipy>=1.10.0
 numpy>=1.24.0
 
-# 實驗配置、進度與數據可視化
+# Configuration, Experiment Tracking & Visualization
 pyyaml>=6.0.0
 matplotlib>=3.7.0
 tqdm>=4.65.0
 
-# 單元測試與驗證
+# Unit Testing & Numerical Verification
 pytest>=7.0.0

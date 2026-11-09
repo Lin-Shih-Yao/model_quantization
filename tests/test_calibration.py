@@ -18,7 +18,7 @@ from src.quantization.calibration import (
 
 
 class DummyDecoderLayer(nn.Module):
-    """用於單元測試的輕量模擬 Transformer Decoder 層。"""
+    """Lightweight dummy Transformer Decoder layer for testing."""
 
     def __init__(self, hidden_dim: int = 128):
         super().__init__()
@@ -32,11 +32,11 @@ class DummyDecoderLayer(nn.Module):
 
 
 def test_layer_observer_basic():
-    """測試 LayerObserver 的極值與 Scale 計算正確性。"""
+    """Tests LayerObserver extrema and scale computation correctness."""
     obs = LayerObserver("test_layer", clip_quantile=0.99)
     dummy_input = torch.tensor([[[-2.0, 1.0, 4.0], [0.5, -3.0, 1.5]]])
 
-    # 測試更新前的防呆
+    # Guard check before update
     uninit_obs = LayerObserver("uninit")
     assert uninit_obs.compute_channel_sym_scale(bits=8) is None
 
@@ -55,21 +55,21 @@ def test_layer_observer_basic():
     assert asym_s > 0.0
     assert 0 <= asym_zp <= 255
 
-    # 測試通道對稱量化 Scale 計算
+    # Test per-channel symmetric scale computation
     ch_sym_s = obs.compute_channel_sym_scale(bits=8)
     assert ch_sym_s is not None
     assert ch_sym_s.shape == (3,)
     expected_ch_scale = torch.tensor([2.0 / 127.0, 3.0 / 127.0, 4.0 / 127.0])
     assert torch.allclose(ch_sym_s, expected_ch_scale, atol=1e-5)
 
-    # 驗證 to_dict 是否正確包含 int8_channel_sym_scale
+    # Verify to_dict includes channel scale
     dict_output = obs.to_dict()
     assert "int8_channel_sym_scale" in dict_output["scales"]
     assert torch.equal(dict_output["scales"]["int8_channel_sym_scale"], ch_sym_s)
 
 
 def test_hook_lifecycle():
-    """測試 Hook 註冊、前向攔截與安全卸載流程。"""
+    """Tests forward hook registration, activation interception, and removal."""
     model = DummyDecoderLayer(hidden_dim=32)
     targets = find_target_linear_modules(model)
 
@@ -79,22 +79,20 @@ def test_hook_lifecycle():
     observers, hooks = attach_observers(targets)
     assert len(hooks) == 2
 
-    # 執行一次假輸入
     dummy_x = torch.randn(1, 16, 32)
     model(dummy_x)
 
-    # 驗證統計有被記錄
     assert observers["q_proj"].sample_count == 1
     assert observers["gate_proj"].sample_count == 1
 
-    # 驗證卸載後不再更新
+    # Verify hooks are cleanly removed
     remove_all_hooks(hooks)
     model(dummy_x)
     assert observers["q_proj"].sample_count == 1
 
 
 def test_calibration_profiler():
-    """測試輕量 CalibrationProfiler 轉接器收集極值與存檔。"""
+    """Tests CalibrationProfiler adapter collecting statistics and saving JSON."""
     from src.quantization.profiler import CalibrationProfiler, save_stats_to_json
     import tempfile
 
@@ -115,7 +113,7 @@ def test_calibration_profiler():
 
 
 def test_unified_calibration_stats():
-    """測試統一 collect_calibration_stats 與 save_calibration_stats_json。"""
+    """Tests unified collect_calibration_stats and save_calibration_stats_json."""
     from src.quantization.calibration import (
         collect_calibration_stats,
         save_calibration_stats_json,

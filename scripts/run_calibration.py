@@ -23,7 +23,7 @@ from src.quantization import calibrate_model
 
 
 def parse_args():
-    """解析校準命令行參數。"""
+    """Parses calibration CLI arguments."""
     parser = argparse.ArgumentParser(description="LLM Activation Calibration Pipeline")
     parser.add_argument(
         "--model_id",
@@ -73,13 +73,13 @@ def parse_args():
 
 
 def build_output_path(output_dir: str, model_id: str, dataset_name: str = "wikitext2") -> str:
-    """產出結構化之 .pt 快取存檔路徑。"""
+    """Builds structured path for saving calibration artifact."""
     clean_name = model_id.strip("/").replace("/", "_")
     return os.path.join(output_dir, f"calib_{clean_name}_{dataset_name}.pt")
 
 
 def main():
-    """校準 CLI 主進入點。"""
+    """Main calibration CLI entrypoint."""
     args = parse_args()
     device = get_optimal_device()
     resolved_path = resolve_model_path(args.model_id)
@@ -92,7 +92,7 @@ def main():
     }
 
     print("=" * 68)
-    print("🎯 大語言模型激活值校準系統 (Activation Calibration Pipeline)")
+    print("🎯 LLM Activation Calibration Pipeline")
     print(f"  • Target Model   : {resolved_path}")
     print(f"  • Calibration DS : {args.dataset.upper()}")
     print(f"  • Device         : {device.upper()}")
@@ -101,14 +101,14 @@ def main():
     print(f"  • Output Path    : {output_path}")
     print("=" * 68)
 
-    print("\n⏳ 正在載入模型與 Tokenizer...")
+    print("\n⏳ Loading model architecture and tokenizer...")
     model, tokenizer = load_pure_text_model_and_tokenizer(
         resolved_path,
         device=device,
         dtype=dtype_map[args.dtype],
     )
 
-    print("\n⚙️ 開始執行激活值前向傳播與統計採集...")
+    print("\n⚙️ Executing forward calibration passes and statistics harvesting...")
     calibrate_model(
         model=model,
         tokenizer=tokenizer,

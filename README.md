@@ -1,4 +1,4 @@
-# LLM Post-Training Quantization & Advanced Rotation Framework
+# LLM Post-Training Quantization & Activation Outlier Benchmark
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch 2.4+](https://img.shields.io/badge/pytorch-2.4+-ee4c2c.svg)](https://pytorch.org/)
@@ -8,20 +8,20 @@
 > **Note**: For the traditional Chinese version of this documentation, please see [README_zh.md](README_zh.md).  
 > For the comprehensive technical findings and empirical analysis, refer to [FINAL_REPORT.md](FINAL_REPORT.md).
 
-An end-to-end research and evaluation framework for **Large Language Model (LLM) Post-Training Quantization (PTQ)**, systematic cross-domain calibration analysis, and **advanced orthogonal rotation techniques (QuaRot / SpinQuant)** for extreme low-bit compression (W4A4, W3A3).
+An end-to-end empirical research and evaluation framework for **Large Language Model (LLM) Post-Training Quantization (PTQ)**, systematic cross-domain calibration analysis, and **activation outlier diagnostics** across edge-deployable LLMs.
 
 ---
 
 ## 🎯 Key Objectives
 
 1. **Precision & Architecture Sensitivity Matrix:**  
-   Empirically assess quantization resilience across heterogeneous edge architectures (Llama 3.2, Qwen 3.5, Gemma 2) under multiple bit-width configurations (W8A16, W16A8, W16A4, W4A4).
+   Empirically assess quantization resilience across heterogeneous edge architectures (Llama 3.2, Qwen 3.5, Gemma 2) under multiple bit-width configurations (W8A16, W16A8, W16A4).
 2. **Cross-Domain Calibration Generalization:**  
    Evaluate how diverse calibration distributions (**WikiText-2**, **C4**, **GSM8K**, **HumanEval**) impact cross-domain linguistic perplexity.
 3. **Activation Outlier Localization:**  
    Trace and quantify activation channel spikes and peak-to-average ratios (PAR) across transformer layers.
-4. **Phase 2 Orthogonal Rotation:**  
-   Ablate the effectiveness of orthogonal transformations (Walsh-Hadamard Transform and learnable Cayley rotations) to disperse outlier energy prior to sub-4-bit matrix operations.
+4. **Diagnostic Evidence for Rotation Techniques:**  
+   Quantify numerical degradation under naive uniform quantization to theoretically motivate and guide future rotation-based methods (e.g., QuaRot, SpinQuant).
 
 ---
 
@@ -82,7 +82,18 @@ Through forward-hook activation profiling, we mapped internal activation spikes 
 * **Qwen 3.5 2B (Layer 23):** Isolated channels surge to **`40.50`** (18.2× the layer mean).
 * **Gemma 2 2B (Layer 34):** Peak activations reach **`58.00`** with a **`122.0×` Peak-to-Average Ratio**.
 
-These findings confirm why standard uniform quantization suffers catastrophic collapse under 4-bit activations (A4) and substantiate the need for Phase 2 **orthogonal rotation (SpinQuant/QuaRot)**.
+These empirical findings illustrate why standard uniform quantization suffers catastrophic collapse under 4-bit activations (A4) due to step-size dilation, providing the diagnostic foundation for future Phase 2 research into orthogonal feature rotations.
+
+---
+
+## 🗺️ Roadmap: Planned Phase 2 Research
+
+> ⚠️ **Phase 2 Status**:  
+> The methodologies below represent planned research directions designed to mitigate the activation spikes identified in Phase 1. They are not yet implemented in the current codebase.
+
+* [ ] **Walsh-Hadamard Transform (WHT):** Implement training-free block-diagonal Hadamard transforms to distribute channel peak energy across hidden dimensions.
+* [ ] **Learnable Cayley Rotations (SpinQuant Architecture):** Optimize orthogonal matrices over the Stiefel manifold to minimize per-layer reconstruction error.
+* [ ] **Sub-4-Bit Activation Benchmarking:** Benchmark extreme precision targets (W4A4, W3A3) comparing unrotated vs. rotated representations.
 
 ---
 
@@ -173,12 +184,13 @@ model_quantization/
 
 ## 📜 References
 
-1. **QuaRot:** Outlier-Free 4-Bit LLM Inference via Orthogonal Rotations (*Ashkboos et al., 2024*)
-2. **SpinQuant:** LLM Quantization with Learned Rotations (*Liu et al., 2024*)
-3. **SmoothQuant:** Accurate and Efficient Post-Training Quantization for Large Language Models (*Xiao et al., 2023*)
+1. **SmoothQuant:** Accurate and Efficient Post-Training Quantization for Large Language Models (*Xiao et al., 2023*)
+2. **QuaRot:** Outlier-Free 4-Bit LLM Inference via Orthogonal Rotations (*Ashkboos et al., 2024*)
+3. **SpinQuant:** LLM Quantization with Learned Rotations (*Liu et al., 2024*)
 4. **Hugging Face Transformers:** Perplexity of Fixed-Length Models Benchmark Standards.
 
 ---
 
 ## 📄 License
 This project is licensed under the [MIT License](LICENSE).
+

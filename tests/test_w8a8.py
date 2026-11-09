@@ -13,7 +13,7 @@ from src.quantization.w8a8 import W8A8Linear, quantize_model_w8a8
 
 
 class MockLLM(nn.Module):
-    """測試替換用的輕量神經網路。"""
+    """Lightweight neural network for module replacement testing."""
 
     def __init__(self, dim: int = 32):
         super().__init__()
@@ -24,28 +24,28 @@ class MockLLM(nn.Module):
 
 
 def test_w8a8_clipping_and_rounding():
-    """驗證 W8A8Linear 在輸入極端尖刺下的截斷與四捨五入行為。"""
+    """Verifies W8A8Linear clipping and rounding behaviors under extreme activation outliers."""
     torch.manual_seed(42)
     linear = nn.Linear(16, 32)
-    # 設定激活截斷為 5.0，Scale 為 5.0 / 127
+    # Set activation clipping to 5.0 and scale to 5.0 / 127
     qlayer = W8A8Linear.from_linear(linear, act_scale=5.0 / 127.0, act_clip_max=5.0)
 
-    # 模擬含有極端尖刺 (如 500.0) 的輸入張量
+    # Simulate input tensor with an extreme outlier spike (e.g., 500.0)
     x = torch.tensor([[[0.5, -2.0, 500.0] + [0.1] * 13]])
     x_q = qlayer.quantize_activation(x)
 
-    # 驗證原本 500.0 的尖刺被截斷並限制在 5.0 附近 (不超過截斷上限)
+    # Verify spike at 500.0 is clipped and capped near 5.0
     spike_val = x_q[0, 0, 2].item()
-    assert abs(spike_val) <= 5.05, f"尖刺截斷失敗: {spike_val}"
+    assert abs(spike_val) <= 5.05, f"Spike clipping failed: {spike_val}"
 
-    # 驗證前向運算輸出正常且無 NaN
+    # Verify forward pass executes cleanly without NaNs
     out = qlayer(x)
     assert not torch.isnan(out).any()
     assert out.shape == (1, 1, 32)
 
 
 def test_w8a8_selective_replacement():
-    """驗證 W8A8 替換時完整保留敏感的 Embedding 與 lm_head。"""
+    """Verifies that W8A8 replacement preserves sensitive Embedding and lm_head layers."""
     model = MockLLM(dim=32)
     quantize_model_w8a8(model)
 

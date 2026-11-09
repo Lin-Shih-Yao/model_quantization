@@ -15,7 +15,7 @@ from src.quantization.utils import (
 
 
 class W8A16Linear(nn.Module):
-    """自訂 W8A16 線性層：權重以 INT8 儲存，推論時即時反量化執行矩陣乘法。"""
+    """Custom W8A16 Linear layer: stores weights in INT8 and dequantizes on-the-fly during forward pass."""
 
     def __init__(self, in_features: int, out_features: int, bias: bool = False):
         super().__init__()
@@ -27,7 +27,7 @@ class W8A16Linear(nn.Module):
 
     @classmethod
     def from_linear(cls, linear: nn.Linear) -> "W8A16Linear":
-        """將原生 nn.Linear 轉換為 W8A16Linear，對齊硬體裝置與精度並轉為 INT8。"""
+        """Converts native nn.Linear into W8A16Linear, aligning device/dtype and quantizing weights to INT8."""
         qlayer = cls(linear.in_features, linear.out_features, bias=(linear.bias is not None))
         qlayer.to(device=linear.weight.device, dtype=linear.weight.dtype)
         w_int8, scales = quantize_weight_int8(linear.weight.data)
@@ -38,14 +38,14 @@ class W8A16Linear(nn.Module):
         return qlayer
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """前向推論：反量化回輸入精度並對齊 Bias 精度執行線性投影。"""
+        """Forward pass: dequantizes INT8 weights to activation precision and executes linear projection."""
         w_dequant = self.weight_int8.to(x.dtype) * self.scales.to(x.dtype)
         bias = self.bias.to(x.dtype) if self.bias is not None else None
         return F.linear(x, w_dequant, bias)
 
 
 def replace_linear_modules(module: nn.Module, target_names: tuple = TARGET_MODULE_NAMES) -> int:
-    """遞迴走訪神經網路子層，遇到目標名稱的 Linear 即替換為 W8A16Linear。"""
+    """Recursively replaces targeted Linear modules with W8A16Linear."""
     return replace_linear_with_factory(
         module,
         factory_fn=lambda linear, _name: W8A16Linear.from_linear(linear),
@@ -54,7 +54,7 @@ def replace_linear_modules(module: nn.Module, target_names: tuple = TARGET_MODUL
 
 
 def quantize_model_w8a16(model: nn.Module, target_names: tuple = TARGET_MODULE_NAMES) -> nn.Module:
-    """將模型的核心 Linear 層無縫替換為 W8A16 INT8 權重，保留 Embedding 與 lm_head。"""
+    """Seamlessly replaces core Linear projections with physical W8A16 layers while preserving Embeddings & Head."""
     replaced_count = replace_linear_modules(model, target_names)
-    print(f"✅ 成功將 {replaced_count} 個核心 Linear 模組替換為 W8A16 (INT8 權重)！")
+    print(f"✅ Successfully replaced {replaced_count} core Linear modules with physical W8A16 (INT8 weights)!")
     return model

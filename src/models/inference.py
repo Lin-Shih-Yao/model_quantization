@@ -36,7 +36,7 @@ def generate_response(
         messages.append({"role": "system", "content": system_prompt})
     messages.append({"role": "user", "content": prompt})
 
-    # 1. 套用官方對話模板 (Chat Template) 或退回純文字
+    # 1. Apply official chat template or fall back to raw text
     if getattr(tokenizer, "chat_template", None) is not None:
         formatted_prompt = tokenizer.apply_chat_template(
             messages,
@@ -46,11 +46,11 @@ def generate_response(
     else:
         formatted_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
 
-    # 2. Tokenize 輸入並送往目標設備
+    # 2. Tokenize inputs and transfer to device
     inputs = tokenizer(formatted_prompt, return_tensors="pt").to(device)
     input_len = inputs.input_ids.shape[1]
 
-    # 3. 前向自回歸生成
+    # 3. Autoregressive generation
     start_time = time.time()
     gen_kwargs = {
         "max_new_tokens": max_new_tokens,
@@ -70,7 +70,7 @@ def generate_response(
 
     elapsed_time = time.time() - start_time
 
-    # 4. 解碼生成的新 Token
+    # 4. Decode newly generated tokens
     generated_tokens = outputs[0][input_len:]
     num_generated = len(generated_tokens)
     response_text = tokenizer.decode(generated_tokens, skip_special_tokens=True).strip()

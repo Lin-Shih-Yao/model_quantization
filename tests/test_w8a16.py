@@ -13,7 +13,7 @@ from src.quantization.w8a16 import W8A16Linear, quantize_model_w8a16
 
 
 class MockLLM(nn.Module):
-    """用於測試結構替換的輕量模擬 LLM 骨幹結構。"""
+    """Lightweight mock LLM backbone for testing structural layer replacement."""
 
     def __init__(self, dim: int = 64):
         super().__init__()
@@ -25,7 +25,7 @@ class MockLLM(nn.Module):
 
 
 def test_w8a16_linear_precision():
-    """驗證 W8A16Linear 的數值誤差與 INT8 權重儲存。"""
+    """Verifies W8A16Linear numerical precision and INT8 buffer storage."""
     torch.manual_seed(42)
     orig_linear = nn.Linear(128, 256, bias=True)
     q_linear = W8A16Linear.from_linear(orig_linear)
@@ -37,21 +37,21 @@ def test_w8a16_linear_precision():
     y_orig = orig_linear(x)
     y_quant = q_linear(x)
 
-    # 驗證量化與原始浮點輸出的平均誤差小於 0.05
+    # Verify mean absolute error between quantized and float output is small (< 0.05)
     mae = torch.mean(torch.abs(y_orig - y_quant)).item()
-    assert mae < 0.05, f"W8A16 數值誤差過大: {mae:.4f}"
+    assert mae < 0.05, f"W8A16 MAE too large: {mae:.4f}"
 
 
 def test_model_selective_quantization():
-    """驗證模型量化時只替換核心 7 層，保留 Embedding 與 lm_head。"""
+    """Verifies that only targeted core projections are replaced, leaving Embeddings & Head untouched."""
     model = MockLLM(dim=32)
     quantize_model_w8a16(model)
 
-    # 核心層被替換為 W8A16Linear
+    # Core projections replaced by W8A16Linear
     assert isinstance(model.q_proj, W8A16Linear)
     assert isinstance(model.down_proj, W8A16Linear)
 
-    # 非目標敏感層保持原樣 (不可被量化)
+    # Sensitive non-target layers remain untouched
     assert isinstance(model.embed_tokens, nn.Embedding)
     assert isinstance(model.norm, nn.LayerNorm)
     assert isinstance(model.lm_head, nn.Linear)

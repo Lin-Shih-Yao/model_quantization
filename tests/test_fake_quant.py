@@ -29,10 +29,10 @@ class SimpleNetwork(nn.Module):
 
 
 def test_symmetric_fake_quantize_math():
-    """驗證對稱偽量化的數值計算、截斷與縮放正確性。"""
+    """Verifies symmetric fake quantization math, clipping, and scale rounding."""
     x = torch.tensor([-10.0, -1.0, 0.0, 1.0, 10.0])
     scale = 2.0 / 127.0
-    # 截斷在 [-2.0, 2.0]
+    # Clipped at [-2.0, 2.0]
     q_x = symmetric_fake_quantize(x, scale=scale, clip_max=2.0, bits=8)
     assert abs(q_x[0].item() - (-2.0)) < 1e-5
     assert abs(q_x[-1].item() - 2.0) < 1e-5
@@ -40,7 +40,7 @@ def test_symmetric_fake_quantize_math():
 
 
 def test_asymmetric_fake_quantize_math():
-    """驗證非對稱偽量化的數值計算。"""
+    """Verifies asymmetric fake quantization numerical computation."""
     x = torch.tensor([0.0, 5.0, 10.0])
     q_x = asymmetric_fake_quantize(x, min_val=0.0, max_val=10.0, bits=8)
     assert q_x.shape == x.shape
@@ -48,11 +48,11 @@ def test_asymmetric_fake_quantize_math():
 
 
 def test_fake_quantizer_attach_and_detach():
-    """驗證 FakeQuantizer 在模型上的掛載、推論攔截與乾淨卸載。"""
+    """Verifies FakeQuantizer attaching, forward interception, and clean removal."""
     model = SimpleNetwork()
     quantizer = FakeQuantizer(target_names=("q_proj",), mode="symmetric")
 
-    # 模擬 LayerObserver 的統計字典
+    # Mock LayerObserver dictionary
     stats_data = {
         "layers": {
             "q_proj": {
@@ -81,7 +81,7 @@ def test_fake_quantizer_attach_and_detach():
 
 
 def test_fake_quantizer_multi_format():
-    """驗證 FakeQuantizer 支援傳入 .pt 檔案路徑與 .json 檔案路徑。"""
+    """Verifies FakeQuantizer compatibility with both .pt and .json calibration artifacts."""
     model = SimpleNetwork()
     quantizer = FakeQuantizer(target_names=("q_proj",))
 
@@ -93,13 +93,13 @@ def test_fake_quantizer_multi_format():
     }
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        # 測試 .pt
+        # Test .pt artifact
         pt_path = os.path.join(tmp_dir, "test_calib.pt")
         torch.save({"layers": dummy_stats}, pt_path)
         assert quantizer.attach(model, pt_path, bits=8) == 1
         quantizer.detach()
 
-        # 測試 .json (傳統格式)
+        # Test .json artifact
         import json
         json_path = os.path.join(tmp_dir, "test_stats.json")
         with open(json_path, "w") as f:

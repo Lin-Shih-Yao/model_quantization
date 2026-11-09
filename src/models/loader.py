@@ -38,9 +38,9 @@ def resolve_model_path(model_id: str, base_dir: str = "./models") -> str:
 
 def load_tokenizer(model_id_or_path: str, **kwargs) -> PreTrainedTokenizerBase:
     """
-    專職載入 Tokenizer 並確保 pad_token 存在。
-    - 優先嘗試純文字 AutoTokenizer。
-    - 若模型架構僅提供 Processor（如部分多模態變體），則降級自 Processor 擷取 Tokenizer。
+    Loads Tokenizer and ensures pad_token is defined.
+    - Attempts standard text AutoTokenizer first.
+    - If model is multimodal or packaged as a Processor, falls back to extracting tokenizer from AutoProcessor.
     """
     resolved_path = resolve_model_path(model_id_or_path)
     tok_kwargs = {"trust_remote_code": True, **kwargs}
@@ -65,15 +65,15 @@ def load_causal_model(
     **kwargs,
 ) -> torch.nn.Module:
     """
-    專職安全載入 Causal LM 權重並部署至指定硬體 (CUDA / MPS / CPU)。
-    - CUDA：預設直接映射至當前 GPU，相容自訂量化層替換；亦支援傳入 device_map='auto'。
-    - MPS / CPU：採用手動 .to(device) 避免 Accelerate 顯存衝突與 Kernel Panic。
+    Loads Causal LM weights safely onto targeted hardware (CUDA / MPS / CPU).
+    - CUDA: Defaults to direct device placement to facilitate custom quantized layer swapping.
+    - MPS / CPU: Uses explicit .to(device) to prevent Accelerate dispatch conflicts.
     """
     resolved_path = resolve_model_path(model_id_or_path)
     actual_device = device or get_optimal_device()
     actual_dtype = dtype or torch_dtype or torch.bfloat16
 
-    # 若未自訂 device_map，單卡 CUDA 建議直接指派 "cuda" 避免 hooks 干擾量化替換
+    # For single GPU CUDA, prefer explicit 'cuda' mapping unless custom device_map specified
     if device_map is None and actual_device == "cuda":
         resolved_device_map = "cuda"
     else:
@@ -106,7 +106,7 @@ def load_pure_text_model_and_tokenizer(
     **kwargs,
 ) -> tuple[torch.nn.Module, PreTrainedTokenizerBase]:
     """
-    統一對外協調入口：循序載入裝置、Tokenizer 與 Causal LM 模型。
+    Unified public coordinator: sequentially loads tokenizer and causal LM model onto target hardware.
     """
     target_device = device or get_optimal_device()
     tokenizer = load_tokenizer(model_id_or_path)

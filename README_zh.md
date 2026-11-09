@@ -1,22 +1,23 @@
-# Model Quantization Analysis & Advanced Rotation Framework
+# LLM 訓練後量化與激活離群特徵分析基準 (Model Quantization & Outlier Benchmark)
 
-這是一個專注於**大語言模型（LLM）量化分析**、**全自動化量化基準評估**與**進階正交旋轉量化技術（Rotation-based Quantization）**的研究與評估框架。
+> **導讀指南**：英文官方說明文件請見 [README.md](README.md)，完整學術結案技術報告請見 [FINAL_REPORT.md](FINAL_REPORT.md)（中文版：[FINAL_REPORT_zh.md](FINAL_REPORT_zh.md)）。
 
-本專案旨在系統性評估現代主流開源端側模型在不同精度與量化策略下的表現，並深入探討利用旋轉變換（如 Walsh-Hadamard Transform、SpinQuant 等）消除激活值異常值（Activation Outliers）對極限低位元量化（如 W4A4、W3A3）的改善效果。
+這是一個專注於**大語言模型（LLM）量化分析**、**跨領域全自動化校準評估**與**神經網路激活離群尖刺診斷（Activation Outlier Diagnostics）**的研究實證框架。
 
 ---
 
 ## 🎯 專案階段目標
 
-### 第一階段：多模型 $\times$ 多精度量化基準分析 (Baseline & Precision Benchmark)
-- **橫向比較**：在相同精度（如 W8A16, W4A16, W8A8, W4A4, FP8）下，分析不同模型架構對量化誤差的抗性。
-- **縱向分析**：繪製各模型在 FP16 $\rightarrow$ FP8 $\rightarrow$ INT8 $\rightarrow$ INT4 $\rightarrow$ INT3 $\rightarrow$ INT2 的困惑度（PPL）與精度衰減曲線。
-- **全自動矩陣管線**：以五模組解耦架構自動遍歷 `[模型] × [資料集] × [校準樣本數] × [位元]`，並具備顯存安全回收與斷線防撞記錄機制。
-- **硬體效能**：評估不同量化策略對顯存佔用（VRAM/RAM）、推理延遲（Latency）與吞吐量的影響。
+### 第一階段（當前已完成成果）：多模型 $\times$ 多領域量化基準與離群值測繪
+- **橫向基準對齊**：建立主流端側模型（Llama 3.2 1B/3B, Qwen 3.5 2B/4B, Gemma 2 2B）在標準 2048 窗口下之 BF16 官方黃金困惑度基準。
+- **實體模組替換 (Physical PTQ)**：實測 W8A16（INT8 權重替換，Llama-1B 損耗僅 0.24%）與 W8A8 模組。
+- **跨領域校準泛化矩陣**：以五模組解耦管線遍歷 4 大語料領域（WikiText-2, C4, GSM8K, HumanEval）共 48 組校準資料集採集。
+- **激活離群尖刺診斷**：逐層量測神經網路通道極值與峰均比（PAR），精確定位導致極限低位元（A4）崩潰之深層異常通道（如 Qwen Layer 23 與 Gemma Layer 34）。
 
-### 第二階段：進階旋轉量化技術 (Advanced Rotation Techniques)
-- **異常值抑制**：利用正交旋轉矩陣 $R$（滿足 $R^T R = I$）對 Transformer 的 Attention 與 MLP 激活特徵空間進行旋轉變換，將極端異常值能量均勻分散。
-- **極限精度評估**：針對 W4A4、W4A8、W3A3 等挑戰性極高的權重與激活量化，對比標準 PTQ vs 旋轉量化（QuaRot / SpinQuant）的恢復效果與消融分析。
+### 第二階段（後續研發規劃 Roadmap）：進階正交旋轉量化技術
+> ⚠️ **進度說明**：本階段為基於第一階段離群值診斷所提出的規劃方向，目前尚未納入程式碼庫。
+- **異常值旋轉分散**：規劃利用正交變換（Walsh-Hadamard 變換與 SpinQuant 可學習 Cayley 旋轉）消除特徵空間異常值。
+- **極限低位元評估**：對比無旋轉 PTQ vs 旋轉量化在 W4A4、W3A3 下的困惑度恢復表現。
 
 ---
 

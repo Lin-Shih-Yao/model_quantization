@@ -17,7 +17,7 @@ def symmetric_fake_quantize(
     clip_max: float | None = None,
     bits: int = 8,
 ) -> torch.Tensor:
-    """對輸入張量 X 執行對稱偽量化 (Clip -> Quantize -> Clamp -> Dequantize)。"""
+    """Performs symmetric fake quantization on input tensor X (Clip -> Quantize -> Clamp -> Dequantize)."""
     q_max = (1 << (bits - 1)) - 1
     s = scale if isinstance(scale, torch.Tensor) else torch.tensor(scale, device=x.device, dtype=x.dtype)
     s = s.to(device=x.device, dtype=x.dtype)
@@ -38,7 +38,7 @@ def asymmetric_fake_quantize(
     max_val: float,
     bits: int = 8,
 ) -> torch.Tensor:
-    """對輸入張量 X 執行非對稱偽量化 (Quantize -> Clamp -> Dequantize)。"""
+    """Performs asymmetric fake quantization on input tensor X (Quantize -> Clamp -> Dequantize)."""
     q_max = (1 << bits) - 1
     val_range = max(max_val - min_val, 1e-8)
     scale = val_range / float(q_max)
@@ -57,7 +57,7 @@ def extract_layer_quant_params(
     bits: int = 8,
     mode: str = "symmetric",
 ) -> tuple[float | torch.Tensor, float | None, float, float]:
-    """從層統計字典萃取對稱/非對稱量化參數 (scale, clip_max, min_val, max_val)。"""
+    """Extracts symmetric/asymmetric quantization parameters (scale, clip_max, min_val, max_val)."""
     min_v = float(layer_info.get("min_val", layer_info.get("min", -1.0)))
     max_v = float(layer_info.get("max_val", layer_info.get("max", 1.0)))
 
@@ -75,7 +75,7 @@ def extract_layer_quant_params(
 
 
 def load_stats_data(stats_data: dict | str) -> dict:
-    """統一載入統計數據，支援 .pt、.json 檔案路徑與記憶體 dict。"""
+    """Unified loader for calibration statistics supporting .pt, .json, and in-memory dicts."""
     if isinstance(stats_data, str):
         if stats_data.endswith(".pt"):
             loaded = torch.load(stats_data, map_location="cpu")
@@ -88,7 +88,7 @@ def load_stats_data(stats_data: dict | str) -> dict:
 
 
 class FakeQuantizer:
-    """純激活值偽量化管理器：使用 Forward Pre-Hook 動態注入與安全卸載。"""
+    """Pure activation fake-quantization manager: injects and removes forward pre-hooks dynamically."""
 
     def __init__(self, target_names: tuple = TARGET_MODULE_NAMES, mode: str = "symmetric"):
         self.target_names = target_names
@@ -97,7 +97,7 @@ class FakeQuantizer:
         self.current_bits: int | None = None
 
     def _create_pre_hook(self, layer_info: dict, bits: int):
-        """建立 Pre-Hook 回呼：在輸入進入 Linear 前原地替換 Activation。"""
+        """Creates pre-hook callback to quantize inputs before entering target Linear module."""
         scale, clip_max, min_v, max_v = extract_layer_quant_params(layer_info, bits=bits, mode=self.mode)
 
         def _pre_hook(module: nn.Module, inputs: tuple):
@@ -112,7 +112,7 @@ class FakeQuantizer:
         return _pre_hook
 
     def attach(self, model: nn.Module, stats_data: dict | str, bits: int = 8) -> int:
-        """讀取校準統計，並為模型目標層掛載 Activation Pre-Hook。"""
+        """Loads calibration statistics and attaches activation pre-hooks to target layers."""
         self.detach()
         self.current_bits = bits
         stats = load_stats_data(stats_data)
@@ -127,14 +127,14 @@ class FakeQuantizer:
                 self.hooks.append(handle)
                 count += 1
 
-        print(f"🎯 [模組 3] 成功為 {count} 個核心層掛載 {bits}-bit ({self.mode}) Activation 偽量化器！")
+        print(f"🎯 [Module 3: Operator Emulation] Successfully attached {bits}-bit ({self.mode}) activation fake-quantizer to {count} layers!")
         return count
 
     def detach(self):
-        """乾淨卸載所有 Hooks，模型秒速還原為原始無量化狀態。"""
+        """Cleanly removes all registered pre-hooks, instantly restoring unquantized state."""
         if self.hooks:
             for handle in self.hooks:
                 handle.remove()
             self.hooks.clear()
-            print("🧹 [模組 3] 已乾淨卸載所有偽量化 Hooks，模型回到原始乾淨狀態。")
+            print("🧹 [Module 3: Operator Emulation] Successfully detached all fake-quantization hooks.")
         self.current_bits = None

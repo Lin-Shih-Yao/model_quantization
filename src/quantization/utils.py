@@ -15,7 +15,7 @@ TARGET_MODULE_NAMES = (
 
 
 def quantize_weight_int8(weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """計算 Per-channel 對稱 Scale 並將權重張量四捨五入為 INT8 整數。"""
+    """Computes per-channel symmetric scales and rounds weight tensor into INT8 integers."""
     w = weight.float()
     scales = torch.clamp(w.abs().amax(dim=1, keepdim=True) / 127.0, min=1e-8)
     w_int8 = torch.clamp(torch.round(w / scales), -127, 127).to(torch.int8)
@@ -28,7 +28,7 @@ def replace_linear_with_factory(
     target_names: tuple = TARGET_MODULE_NAMES,
     prefix: str = "",
 ) -> int:
-    """通用遞迴走訪器：遇到目標 Linear 即以工廠函式產出的量化層替換。"""
+    """Generic recursive traverser replacing target Linear modules with quantized layers from factory_fn."""
     count = 0
     for name, child in module.named_children():
         full_name = f"{prefix}.{name}" if prefix else name
@@ -41,16 +41,16 @@ def replace_linear_with_factory(
 
 
 def load_calib_layers(calib_file: str | None = None) -> dict:
-    """讀取校準快取 .pt 檔案中的 layers 統計字典。"""
+    """Loads layers statistics dictionary from calibration .pt file."""
     if calib_file and os.path.exists(calib_file):
         data = torch.load(calib_file, map_location="cpu")
-        print(f"📖 成功載入校準快取數據: {calib_file} (包含 {len(data.get('layers', {}))} 層)")
+        print(f"📖 Successfully loaded calibration artifact: {calib_file} ({len(data.get('layers', {}))} layers)")
         return data.get("layers", {})
     return {}
 
 
 def find_calib_scale_and_clip(calib_layers: dict, module_full_name: str) -> tuple[float, float | None]:
-    """從校準字典中尋找該層匹配的 Activation Scale 與 99.99% 截斷門檻。"""
+    """Locates matching activation scale and 99.99% clipping threshold for module from calibration dict."""
     for key, info in calib_layers.items():
         if key in module_full_name or module_full_name in key:
             scale = info["scales"].get("int8_sym_scale", 1.0)

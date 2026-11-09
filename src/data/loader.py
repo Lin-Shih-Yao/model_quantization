@@ -10,7 +10,7 @@ from transformers import PreTrainedTokenizerBase
 
 
 # ==============================================================================
-# 資料集文字抽取器映射表 (Extractor Mapping / Strategy Pattern)
+# Multi-domain Text Extractor Registry (Strategy Pattern)
 # ==============================================================================
 TEXT_EXTRACTORS = {
     "wikitext2": lambda x: x.get("text", ""),
@@ -29,27 +29,27 @@ def get_calibration_dataloader(
     seed: int = 42,
 ) -> torch.Tensor | list[torch.Tensor]:
     """
-    從指定領域資料集抽樣並編碼為固定形狀 (n_samples, seq_len) 的校準張量或張量列表。
+    Samples and tokenizes multi-domain calibration tokens into uniform tensors of shape [n_samples, seq_len].
 
     Args:
-        tokenizer: 預訓練分詞器
-        dataset_name: 資料集名稱 ("wikitext2", "c4", "humaneval", "gsm8k")
-        n_samples: 取樣樣本數量 (e.g. 16, 128, 512)
-        seq_len: 每個樣本之序列長度 (預設 2048)
-        as_tensor: 若為 True 則回傳形狀為 [n_samples, seq_len] 之單一張量，
-                   若為 False 則回傳包含 n_samples 個 [1, seq_len] 張量之列表。
-        seed: 隨機種子
+        tokenizer: Pretrained Hugging Face tokenizer.
+        dataset_name: Target domain dataset ("wikitext2", "c4", "humaneval", "gsm8k").
+        n_samples: Number of sample windows to harvest (e.g., 16, 128, 512).
+        seq_len: Sequence window length for each sample (default: 2048).
+        as_tensor: If True, returns a concatenated 2D tensor [n_samples, seq_len].
+                   If False, returns a list of 2D tensors each of shape [1, seq_len].
+        seed: Random generator seed for reproducibility.
 
     Returns:
-        torch.Tensor | list[torch.Tensor]
+        torch.Tensor | list[torch.Tensor]: Harvested calibration token sequences.
     """
     if dataset_name not in TEXT_EXTRACTORS:
-        raise ValueError(f"不支援的資料集: {dataset_name} (支援列表: {list(TEXT_EXTRACTORS.keys())})")
+        raise ValueError(f"Unsupported dataset: {dataset_name} (Supported: {list(TEXT_EXTRACTORS.keys())})")
 
     random.seed(seed)
     torch.manual_seed(seed)
 
-    print(f"\n📦 [數據模組] 載入資料集: {dataset_name.upper()} (目標 {n_samples} 筆, seq_len={seq_len}) ...")
+    print(f"\n📦 [Data Engine] Loading dataset: {dataset_name.upper()} (Target: {n_samples} samples, seq_len={seq_len}) ...")
     if dataset_name == "wikitext2":
         try:
             dataset = load_dataset("wikitext", "wikitext-2-raw-v1", split="train")
@@ -96,7 +96,7 @@ def get_calibration_dataloader(
             token_buffer = token_buffer[seq_len:]
 
     if len(samples) < n_samples:
-        raise RuntimeError(f"資料集 '{dataset_name}' 樣本不足，僅收集到 {len(samples)}/{n_samples} 筆。")
+        raise RuntimeError(f"Insufficient samples harvested from '{dataset_name}': got {len(samples)}/{n_samples}.")
 
     if as_tensor:
         calib_tensor = torch.cat(samples, dim=0)
@@ -113,7 +113,7 @@ def get_calib_dataset(
     **kwargs,
 ) -> list[torch.Tensor]:
     """
-    取得校準樣本列表 (向後相容介面，回傳 list[torch.Tensor]，每個為 [1, seq_len])。
+    Retrieves calibration sample list (backward compatibility wrapper returning list[torch.Tensor], each [1, seq_len]).
     """
     return get_calibration_dataloader(
         tokenizer=tokenizer,

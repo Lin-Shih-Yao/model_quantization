@@ -1,5 +1,5 @@
 """
-Demo Inference Script & Function for Target LLMs (Qwen 3.5 2B/4B, Gemma 4 E2B, LLaMA 3.2 1B/3B)
+Demo Inference Script & Function for Target LLMs (Qwen 3.5 2B/4B, Gemma 2B, LLaMA 3.2 1B/3B)
 Can be imported directly as a function `demo_inference(...)` for downstream evaluation and calibration,
 or executed from the command line.
 """
@@ -24,7 +24,7 @@ from src.models.inference import generate_response
 
 def demo_inference(
     model_id: str = "Qwen/Qwen3.5-2B",
-    prompt: str = "請用一句話解釋什麼是大語言模型量化（Model Quantization）？",
+    prompt: str = "Explain what Post-Training Quantization (PTQ) means in one concise sentence.",
     model=None,
     tokenizer=None,
     max_new_tokens: int = 50,
@@ -33,11 +33,10 @@ def demo_inference(
     verbose: bool = True,
 ) -> dict:
     """
-    通用推論入口函式（可直接在其他 evaluation、校正或測試腳本中引用）：
-    
-    支援兩種呼叫模式：
-      1. 傳入 model_id：自動載入模型、自動推論並回傳結果。
-      2. 傳入已存在的 model 與 tokenizer（如量化後模型）：直接復用記憶體中的模型執行推論。
+    Universal inference entrypoint.
+    Supports two invocation patterns:
+      1. Pass model_id: loads model, runs generation, and returns performance metrics.
+      2. Pass existing model and tokenizer: reuses in-memory quantized model.
 
     Returns:
         dict: {
@@ -64,17 +63,17 @@ def demo_inference(
 
     if verbose:
         print("=" * 68)
-        print("🚀 LLM Pure-Text Inference Demo (MPS GPU Acceleration)")
+        print("🚀 LLM Text Inference Benchmark")
         print(f"  • Target Model : {resolved_path}")
-        print(f"  • Device GPU   : {device.upper()} (Apple Silicon MPS / CUDA)")
+        print(f"  • Device GPU   : {device.upper()} (MPS / CUDA)")
         print(f"  • Precision    : {dtype}")
         print(f"  • Prompt       : {prompt}")
         print("=" * 68)
 
-    # 1. 若外部未提供已載入的模型，則自動安全載入純文字模型
+    # 1. Load model if not provided
     if model is None or tokenizer is None:
         if verbose:
-            print("\n⏳ 正在載入純文字模型結構至 GPU (MPS)...")
+            print("\n⏳ Loading model architecture and weights to hardware device...")
         load_start = time.time()
         model, tokenizer = load_pure_text_model_and_tokenizer(resolved_path, device=device, dtype=torch_dtype)
         load_time = time.time() - load_start
@@ -82,16 +81,16 @@ def demo_inference(
         ram_gb = psutil.Process().memory_info().rss / (1024 ** 3)
         num_params = sum(p.numel() for p in model.parameters()) / 1e9
         if verbose:
-            print(f"✅ 模型載入完成！")
-            print(f"  • 載入耗時 : {load_time:.2f} 秒")
-            print(f"  • 文字參數量 : {num_params:.2f} B ({num_params * 1000:.0f} M)")
-            print(f"  • 實體記憶體佔用 : ~{ram_gb:.2f} GB RAM (安全且輕量)")
+            print(f"✅ Model successfully loaded!")
+            print(f"  • Loading Time    : {load_time:.2f} s")
+            print(f"  • Parameter Count : {num_params:.2f} B ({num_params * 1000:.0f} M)")
+            print(f"  • Host RAM Usage  : ~{ram_gb:.2f} GB RAM")
     else:
         ram_gb = psutil.Process().memory_info().rss / (1024 ** 3)
 
-    # 2. 執行推論生成
+    # 2. Execute inference generation
     if verbose:
-        print("\n⚡ 開始純文字推論生成中 (MPS GPU)...")
+        print("\n⚡ Executing autoregressive text generation...")
     gen_result = generate_response(
         model=model,
         tokenizer=tokenizer,
@@ -102,15 +101,15 @@ def demo_inference(
 
     if verbose:
         print("\n" + "=" * 68)
-        print("📝 純文字回覆結果：")
+        print("📝 Model Generation Output:")
         print("-" * 68)
         print(gen_result["response"])
         print("=" * 68)
-        print(f"📊 推論性能指標 (MPS GPU)：")
-        print(f"  • 輸入長度 : {gen_result['input_tokens']} tokens")
-        print(f"  • 生成長度 : {gen_result['output_tokens']} tokens")
-        print(f"  • 生成耗時 : {gen_result['latency_sec']:.2f} 秒")
-        print(f"  • 生成速度 : {gen_result['tokens_per_sec']:.2f} tokens/秒")
+        print(f"📊 Inference Profiling Metrics:")
+        print(f"  • Prompt Tokens  : {gen_result['input_tokens']} tokens")
+        print(f"  • Output Tokens  : {gen_result['output_tokens']} tokens")
+        print(f"  • Generation Time: {gen_result['latency_sec']:.2f} s")
+        print(f"  • Throughput     : {gen_result['tokens_per_sec']:.2f} tokens/s")
         print("=" * 68)
 
     return {
@@ -127,18 +126,18 @@ def demo_inference(
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Demo Pure-Text Inference for LLMs (Qwen 3.5 2B/4B, Gemma 4 E2B, LLaMA 3.2)"
+        description="Demo Text Inference for LLMs (Qwen 3.5 2B/4B, Gemma 2B, LLaMA 3.2)"
     )
     parser.add_argument(
         "--model_id",
         type=str,
         default="Qwen/Qwen3.5-2B",
-        help="HuggingFace model ID or local directory (e.g. Qwen/Qwen3.5-2B, google/gemma-4-E2B-it, Qwen/Qwen3.5-4B)",
+        help="HuggingFace model ID or local directory (e.g. Qwen/Qwen3.5-2B, google/gemma-2-2b, meta-llama/Llama-3.2-1B)",
     )
     parser.add_argument(
         "--prompt",
         type=str,
-        default="請用一句話解釋什麼是大語言模型量化（Model Quantization）？",
+        default="Explain what Post-Training Quantization (PTQ) means in one concise sentence.",
         help="User query or prompt to test generation",
     )
     parser.add_argument(
@@ -152,7 +151,7 @@ def parse_args():
         type=str,
         default="bfloat16",
         choices=["bfloat16", "float16", "float32"],
-        help="Model weight precision (bfloat16 recommended for Mac M3 MPS)",
+        help="Model weight precision (bfloat16 recommended)",
     )
     return parser.parse_args()
 

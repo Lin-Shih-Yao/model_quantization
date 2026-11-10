@@ -31,9 +31,9 @@ We evaluate representative edge-deployable causal language models:
 
 | Model Family | Model ID | Parameters | Architecture Highlights |
 | :--- | :--- | :---: | :--- |
-| **Llama** (Meta) | `meta-llama/Llama-3.2-1B-Instruct`<br>`meta-llama/Llama-3.2-3B-Instruct` | 1.2B / 3.2B | 128k context, standard RMSNorm, Grouped Query Attention (GQA), academic gold baseline |
-| **Qwen** (Alibaba) | `Qwen/Qwen3.5-2B`<br>`Qwen/Qwen3.5-4B` | 2.2B / 4.5B | SwiGLU activation, RoPE embeddings, GQA |
-| **Gemma** (Google) | `google/gemma-2-2b-it` | 2.6B | GeGLU activation, Logit soft-capping, sliding-window attention |
+| **Llama** (Meta) | `meta-llama/Llama-3.2-1B-Instruct`<br>`meta-llama/Llama-3.2-3B-Instruct` | 1.24B / 3.21B | 128k context, standard RMSNorm, Grouped Query Attention (GQA), academic gold baseline |
+| **Qwen** (Alibaba) | `Qwen/Qwen3.5-2B`<br>`Qwen/Qwen3.5-4B` | 2.21B / 4.54B | SwiGLU activation, RoPE embeddings, GQA |
+| **Gemma** (Google) | `google/gemma-2-2b-it` | 2.61B | GeGLU activation, Logit soft-capping, sliding-window attention |
 
 ---
 
@@ -43,13 +43,13 @@ The repository enforces a clean, modular pipeline separating calibration extract
 
 ```mermaid
 graph TD
-    M1["<b>Module 1: src/data/loader.py</b><br>Token Streaming Packing Buffer<br>(WikiText-2, C4, GSM8K, HumanEval)"] -->|Uniform Tensor: N x 2048| M2["<b>Module 2: src/quantization/calibration.py</b><br>Unified LayerObserver<br>Captures extrema, 99.99% quantiles & channel scales"]
-    M2 -->|Calibration Profiles (.json / .pt)| M3["<b>Module 3: src/quantization/fake_quant.py</b><br>Dynamic Pre-Forward Hook Injector<br>(Symmetric W16A8 / W16A4 emulation)"]
-    M3 -->|Hooked Causal Model| M4["<b>Module 4: src/eval/ppl.py</b><br>Standard 2048-Window Sliding PPL<br>Crash-resilient CSV logging"]
-    M5["<b>Module 5: scripts/run_pipeline.py</b><br>Matrix Orchestrator & Controller"] -.->|VRAM survival cleanup & dispatch| M1
-    M5 -.->|VRAM survival cleanup & dispatch| M2
-    M5 -.->|VRAM survival cleanup & dispatch| M3
-    M5 -.->|VRAM survival cleanup & dispatch| M4
+    M1["Module 1: src/data/loader.py<br>Token Streaming Packing Buffer<br>WikiText-2, C4, GSM8K, HumanEval"] -->|"Uniform Tensor: N x 2048"| M2["Module 2: src/quantization/calibration.py<br>Unified LayerObserver<br>Captures extrema, 99.99% quantiles & channel scales"]
+    M2 -->|"Calibration Profiles: .json / .pt"| M3["Module 3: src/quantization/fake_quant.py<br>Dynamic Pre-Forward Hook Injector<br>Symmetric W16A8 / W16A4 emulation"]
+    M3 -->|"Hooked Causal Model"| M4["Module 4: src/eval/ppl.py<br>Standard 2048-Window Sliding PPL<br>Crash-resilient CSV logging"]
+    M5["Module 5: scripts/run_pipeline.py<br>Matrix Orchestrator & Controller"] -.->|"VRAM survival cleanup & dispatch"| M1
+    M5 -.->|"VRAM survival cleanup & dispatch"| M2
+    M5 -.->|"VRAM survival cleanup & dispatch"| M3
+    M5 -.->|"VRAM survival cleanup & dispatch"| M4
 ```
 
 ### Architectural Highlights:
@@ -63,14 +63,14 @@ graph TD
 
 Evaluated on the full official **WikiText-2 Test Set** (Context length: 2048, Stride: 512, Target Mask: -100):
 
-| Model | Parameters | Precision | Measured PPL | Degradation ($\Delta$ PPL) | VRAM Footprint | Throughput |
+| Model | Parameters | Precision | Measured PPL | Degradation ($\Delta$ PPL) | VRAM Footprint | Throughput (tokens/s, t/s) |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Qwen 3.5 4B** | 4.54 B | BF16 Baseline | **`8.2480`** | — | ~8.5 GB | 58.8 tokens/s |
-| **Llama 3.2 3B** | 3.21 B | BF16 Baseline | **`9.5177`** | — | ~6.5 GB | 78.3 tokens/s |
-| **Qwen 3.5 2B** | 2.21 B | BF16 Baseline | **`10.6631`** | — | ~4.3 GB | 126.0 tokens/s |
-| **Llama 3.2 1B** | 1.24 B | BF16 Baseline | **`11.4027`** | — | ~2.5 GB | 179.6 tokens/s |
-| 🏆 **Llama 3.2 1B** | 1.24 B | **W8A16 PTQ** | **`11.4300`** | **`+0.0273` (`+0.24%`)** | **~1.3 GB (-50%)** | **150.3 tokens/s** |
-| **Gemma 2 2B** | 2.61 B | BF16 Baseline | **`11.8346`** | — | ~4.5 GB | 188.9 tokens/s |
+| **Qwen 3.5 4B** | 4.54 B | BF16 Baseline | **`8.2480`** | — | ~8.5 GB | 58.8 t/s |
+| **Llama 3.2 3B** | 3.21 B | BF16 Baseline | **`9.5177`** | — | ~6.5 GB | 78.3 t/s |
+| **Qwen 3.5 2B** | 2.21 B | BF16 Baseline | **`10.6631`** | — | ~4.3 GB | 126.0 t/s |
+| **Llama 3.2 1B** | 1.24 B | BF16 Baseline | **`11.4027`** | — | ~2.5 GB | 179.6 t/s |
+| 🏆 **Llama 3.2 1B** | 1.24 B | **W8A16 PTQ** | **`11.4300`** | **`+0.0273` (`+0.24%`)** | **~1.3 GB (-50%)** | **150.3 t/s** |
+| **Gemma 2 2B** | 2.61 B | BF16 Baseline | **`11.8346`** | — | ~4.5 GB | 188.9 t/s |
 
 > 💡 **W8A16 Milestone:** Replacing 112 projection matrices with INT8 linear layers produces textbook-grade compression: **0.24% perplexity delta with 50% memory savings**.
 
@@ -80,7 +80,7 @@ Evaluated on the full official **WikiText-2 Test Set** (Context length: 2048, St
 
 Through forward-hook activation profiling, we mapped internal activation spikes and peak-to-average ratios (PAR):
 * **Qwen 3.5 2B (Layer 23):** Isolated channels surge to **`40.50`** (18.2× the layer mean).
-* **Gemma 2 2B (Layer 34):** Peak activations reach **`58.00`** with a **`122.0×` Peak-to-Average Ratio**.
+* **Gemma 2 2B (Layer 34):** Peak activations reach **`58.00`** with a **`123.4×` Peak-to-Average Ratio**.
 
 These empirical findings illustrate why standard uniform quantization suffers catastrophic collapse under 4-bit activations (A4) due to step-size dilation, providing the diagnostic foundation for future Phase 2 research into orthogonal feature rotations.
 

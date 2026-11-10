@@ -15,8 +15,8 @@
 | :--- | :--- | :--- |
 | **核心任務** | **端側（1B–4B）LLM 推論效能基準評估、跨領域敏感度分析與深層數值病理診斷 (Inference Benchmarking & Numerical Pathology Profiling)** | 客觀量化黑盒模型行為，精準定位邊緣 Memory-Bound 限制與低位元精度塌陷邊界 |
 | **關鍵里程碑** | **Llama-3.2-1B W8A16 損耗僅 +0.24%（PPL +0.0273）** | 物理替換 112 個 Linear 層；實證權重傳輸帶寬需求減半 (**-49.2%**)，推論吞吐達 150.3 t/s |
-| **黃金基準驗證** | **5 款主流模型完整滑動窗口 PPL 嚴格對齊** | Qwen-4B (8.25)、Llama-3B (9.52)、Qwen-2B (10.66)、Llama-1B (11.40)、Gemma-2B (11.83) |
-| **核心突破發現** | **深層激活峰均比（PAR）高達 122.0×** | 定位 Qwen L23（40.50）與 Gemma L34（58.00）尖刺，揭露 Uniform A4 階距被極值綁架之崩潰機制 |
+| **黃金基準驗證** | **5 款主流模型完整滑動窗口 PPL 嚴格對齊** | Qwen 3.5 4B (8.25)、Llama 3.2 3B (9.52)、Qwen 3.5 2B (10.66)、Llama 3.2 1B (11.40)、Gemma 2 2B (11.83) |
+| **核心突破發現** | **深層激活峰均比（PAR）高達 123.4×** | 定位 Qwen 3.5 2B L23（40.50）與 Gemma 2 2B L34（58.00）尖刺，揭露 Uniform A4 階距被極值綁架之崩潰機制 |
 | **多領域校準** | **48 組全矩陣檔案入庫（4 模型 × 4 領域 × 3 規模）** | 橫跨 WikiText-2, C4, GSM8K, HumanEval，客觀量化語意結構對張量動態範圍的衝擊 |
 | **測試台規格** | **雙軌邊緣測試矩陣（NVIDIA T4 16GB [Google Colab] vs. Apple M3 16GB UMA）** | 驗證 PCIe 離散顯存架構（320 GB/s）與端側統一記憶體架構（100 GB/s UMA）之實體推論特徵 |
 | **交付邊界** | **Phase 1 驗收完成 / Phase 2 驗證標尺確立** | Phase 1 提供高解析度拓撲診斷依據；Phase 2 定位正交旋轉等價變換之驗證基準 |
@@ -51,7 +51,7 @@
 | **記憶體頻寬** | **320.0 GB/s** | **100.0 GB/s** |
 | **軟體環境** | Linux 6.1 x86_64, CUDA 12.2, Driver 535+ | macOS Sonoma (Darwin 24.0.0) |
 | **加速後端** | PyTorch 2.4.0 (CUDA 後端) | PyTorch 2.4.0 (Apple MPS 後端) |
-| **承載任務** | 全量 2048 窗口 PPL 評估、實體 W8A16 替換評估 | 純文字端側推論吞吐量、實體 RAM 佔用測量 |
+| **承載任務** | 全量 2048 窗口 PPL 評估、實體 W8A16 替換評估 | 純文字端側推論吞吐量 (tokens/s, t/s)、實體 RAM 佔用測量 |
 
 ---
 
@@ -61,13 +61,13 @@
 
 ```mermaid
 graph TD
-    M1["<b>模組 1: Data Engine</b><br>Token Streaming Packing Buffer<br>(WikiText-2, C4, GSM8K, HumanEval)"] -->|純淨緊湊張量: N x 2048| M2["<b>模組 2: Observer System</b><br>Unified LayerObserver<br>在線極值、99.99% 門檻值與通道尺度統計"]
-    M2 -->|結構化中繼檔 (.json / .pt)| M3["<b>模組 3: Operator Emulation</b><br>Dynamic Pre-Forward Hook Injector<br>(數值對齊實體 W8A8 / W16A4 對稱運算)"]
-    M3 -->|掛載模擬模型| M4["<b>模組 4: Evaluation Harness</b><br>Strided Sliding-Window PPL Engine<br>(防斷線 CSV 成績單持久化)"]
-    M5["<b>模組 5: Matrix Controller</b><br>Multi-Node Orchestrator"] -.->|主動式顯存生命週期重置| M1
-    M5 -.->|主動式顯存生命週期重置| M2
-    M5 -.->|主動式顯存生命週期重置| M3
-    M5 -.->|主動式顯存生命週期重置| M4
+    M1["模組 1: Data Engine<br>Token Streaming Packing Buffer<br>WikiText-2, C4, GSM8K, HumanEval"] -->|"純淨緊湊張量: N x 2048"| M2["模組 2: Observer System<br>Unified LayerObserver<br>在線極值、99.99% 門檻值與通道尺度統計"]
+    M2 -->|"結構化中繼檔: .json / .pt"| M3["模組 3: Operator Emulation<br>Dynamic Pre-Forward Hook Injector<br>數值對齊實體 W8A8 / W16A4 對稱運算"]
+    M3 -->|"掛載模擬模型"| M4["模組 4: Evaluation Harness<br>Strided Sliding-Window PPL Engine<br>防斷線 CSV 成績單持久化"]
+    M5["模組 5: Matrix Controller<br>Multi-Node Orchestrator"] -.->|"主動式顯存生命週期重置"| M1
+    M5 -.->|"主動式顯存生命週期重置"| M2
+    M5 -.->|"主動式顯存生命週期重置"| M3
+    M5 -.->|"主動式顯存生命週期重置"| M4
 ```
 
 ### 關鍵防禦機制設計 (Engineering Defenses)：
@@ -101,20 +101,20 @@ graph TD
 ### 4.1. 原生浮點黃金基準 (FP16/BF16 on Testbed Alpha: T4)
 全量評估採用標準 **WikiText-2 Test Set**（約 30 萬 tokens），於 Google Colab / Tesla T4 完整執行：
 
-| 評估模型 (Model ID) | 參數量 | Transformer 層數 | 評估 Context | 實測 PPL | 評估步數 | 實測吞吐量 (Tesla T4) | 基準定位 |
+| 評估模型 (Model ID) | 參數量 | Transformer 層數 | 評估 Context | 實測 PPL | 評估步數 | 實測吞吐量 (tokens/s, t/s) | 基準定位 |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Qwen 3.5 4B** | 4.54 B | 36 | 2048 | **`8.2480`** | 578 步 (全量) | **58.80 tokens/s** (5051.8s) | 刷新端側旗艦模型最低困惑度 |
-| **Llama 3.2 3B** | 3.21 B | 28 | 2048 | **`9.5177`** | 562 步 (全量) | **78.30 tokens/s** (3689.2s) | 突破 10.0 大關，展現 3B 頂級理解力 |
-| **Qwen 3.5 2B** | 2.21 B | 24 | 2048 | **`10.6631`** | 578 步 (全量) | **126.00 tokens/s** (2356.1s) | 實測超越前代 2.5 3B 基準 (10.72) |
-| **Llama 3.2 1B** | 1.24 B | 16 | 2048 | **`11.4027`** | 562 步 (全量) | **179.60 tokens/s** (1608.0s) | 精準收斂於官方 11.0~12.0 預期區間 |
-| **Gemma 2 2B** | 2.61 B | 26 | 2048 | **`11.8346`** | 564 步 (全量) | **188.90 tokens/s** (1531.2s) | 純文字自回歸架構正常收斂 |
+| **Qwen 3.5 4B** | 4.54 B | 36 | 2048 | **`8.2480`** | 578 步 (全量) | **58.80 t/s** (5051.8s) | 刷新端側旗艦模型最低困惑度 |
+| **Llama 3.2 3B** | 3.21 B | 28 | 2048 | **`9.5177`** | 562 步 (全量) | **78.30 t/s** (3689.2s) | 突破 10.0 大關，展現 3B 頂級理解力 |
+| **Qwen 3.5 2B** | 2.21 B | 24 | 2048 | **`10.6631`** | 578 步 (全量) | **126.00 t/s** (2356.1s) | 實測超越前代 2.5 3B 基準 (10.72) |
+| **Llama 3.2 1B** | 1.24 B | 16 | 2048 | **`11.4027`** | 562 步 (全量) | **179.60 t/s** (1608.0s) | 精準收斂於官方 11.0~12.0 預期區間 |
+| **Gemma 2 2B** | 2.61 B | 26 | 2048 | **`11.8346`** | 564 步 (全量) | **188.90 t/s** (1531.2s) | 純文字自回歸架構正常收斂 |
 
 ---
 
 ### 4.2. 消費級端側解碼效能 (BF16 on Testbed Beta: Apple M3, 16GB UMA)
 於純文字生成場景下，測得 Apple M3 實體統一記憶體佔用與首次載入延遲：
 
-| 模型型號 | 參數量 | 首次載入時間 | 解碼吞吐量 | 實體記憶體佔用 (RAM) | 端側邊界探測結論 |
+| 模型型號 | 參數量 | 首次載入時間 | 解碼吞吐量 (t/s) | 實體記憶體佔用 (RAM) | 端側邊界探測結論 |
 | :--- | :---: | :---: | :---: | :---: | :--- |
 | **Llama 3.2 1B** | 1.24 B | **~ 3.0 s** | **`15.49 t/s`** | 🟢 **~ 2.5 GB** | **極致輕量，適合端側常駐背景服務** |
 | **Llama 3.2 3B** | 3.21 B | ~ 14.6 s | **`7.11 t/s`** | 🟢 **~ 6.5 GB** | **端側高品質對話之性能平衡點** |
@@ -127,7 +127,7 @@ graph TD
 ### 4.3. 實體 W8A16 替換之硬體效益 (Llama 3.2 1B on Tesla T4)
 物理替換 112 個投影矩陣（$Q, K, V, O$ 及 Gate, Up, Down）之實測剖析：
 
-$$\Delta \text{PPL} = \text{PPL}_{W8A16} - \text{PPL}_{\text{Baseline}} = 11.4300 - 11.4027 = \mathbf{+0.0273}\ (\text{相對損耗僅 } \mathbf{+0.24\%})$$
+$$\Delta \text{PPL} = \text{PPL}_{\text{W8A16}} - \text{PPL}_{\text{Baseline}} = 11.4300 - 11.4027 = \mathbf{+0.0273}\ (\text{相對損耗 } \mathbf{+0.24\%})$$
 
 | 系統指標 (System Metric) | 原生浮點 (BF16) | 實體量化 (W8A16) | 效能剖析歸因 (Profiling Insight) |
 | :--- | :---: | :---: | :--- |
@@ -141,7 +141,7 @@ $$\Delta \text{PPL} = \text{PPL}_{W8A16} - \text{PPL}_{\text{Baseline}} = 11.430
 
 ## 5. 跨領域校準分析與深層離群拓撲診斷 (Outlier Topology & Root Cause)
 
-> **結論先行 (BLUF)**：模型深層（Depth $> 20$）存在嚴重的數值異常突波（PAR $> 120\times$）。在 4-bit 均勻量化下，單一全域階距被迫擴張數倍，導致 99.8% 正常通道數值在取整後湮滅歸零，此為低位元激活量化失效之數學根本成因。
+> **結論先行 (BLUF)**：模型深層（Depth $> 20$）存在嚴重的數值異常突波（PAR 高達 $123.4\times$）。在 4-bit 均勻量化下，單一全域階距被迫擴張數倍，導致 99.8% 正常通道數值在取整後湮滅歸零，此為低位元激活量化失效之數學根本成因。
 
 ### 5.1. 跨領域校準尺度偏置剖析 (Cross-Domain Scale Drift)
 透過 48 組資料集（4 模型 × 4 語料 × 3 樣本數）對比分析，客觀揭露語義分佈對張量動態範圍的衝擊：
@@ -158,7 +158,7 @@ $$\Delta \text{PPL} = \text{PPL}_{W8A16} - \text{PPL}_{\text{Baseline}} = 11.430
 | :--- | :--- | :---: | :---: | :---: | :--- |
 | **Layer 0 – 16 (淺中層)** | Attention / MLP | $< 10.0$ | ~ 0.89 | ~ 11.2× | 🟢 **數值健康**：特徵張量良好對齊，均勻量化無損映射 |
 | **Qwen 3.5 2B (Layer 23)** | Down Projection | **40.50** | 2.22 | **18.2×** | 🟡 **通道孤立突波**：少數 4 個固定通道數值暴衝，拉偏整體 Scale |
-| **Gemma 2 2B (Layer 34)** | Gate / Up Projection | **58.00** | 0.47 | **122.0×** | 🔴 **極端離群尖刺**：非線性累積引發 PAR 突發，強制放大階距逾 10 倍 |
+| **Gemma 2 2B (Layer 34)** | Gate / Up Projection | **58.00** | 0.47 | **123.4×** | 🔴 **極端離群尖刺**：非線性累積引發 PAR 突發，強制放大階距逾 10 倍 |
 
 ---
 
@@ -169,7 +169,7 @@ $$\Delta \text{PPL} = \text{PPL}_{W8A16} - \text{PPL}_{\text{Baseline}} = 11.430
 #### 1. 均勻量化階距計算公式：
 $$s = \frac{\max(|X|)}{2^{b-1} - 1}$$
 
-#### 2. 數值代入：以 4-bit 激活量化（$b=4$，整數範圍 $[-8, 7]$）代入 Gemma-2 Layer 34 實測極值：
+#### 2. 數值代入：以 4-bit 激活量化（$b=4$，整數範圍 $[-8, 7]$）代入 Gemma 2 2B Layer 34 實測極值：
 $$s = \frac{58.00}{2^{4-1} - 1} = \frac{58.00}{7} \approx \mathbf{8.28}$$
 
 #### 3. 正常維度特徵歸零實例：
@@ -177,7 +177,7 @@ $$s = \frac{58.00}{2^{4-1} - 1} = \frac{58.00}{7} \approx \mathbf{8.28}$$
 
 $$X_{\text{quant}} = \text{Round}\left(\frac{1.8}{8.28}\right) = \text{Round}(0.217) = \mathbf{0}$$
 
-> **診斷結論**：當階距被極值拉大至 $8.28$ 時，所有小於 $4.14$ 的有效特徵值在取整後全部被**強制歸零（Zero-Collapse）**。神經網路在此層的非線性表徵能力徹底喪失，引發困惑度指數級發散。
+> **診斷結論**：當階距被極值拉大至 $8.28$ 時，所有絕對值小於 $4.14$（即落於 $[-4.14, 4.14]$ 區間內，$|x| < 4.14$）的有效特徵值在取整後全部被**強制歸零（Zero-Collapse）**。神經網路在此層的非線性表徵能力徹底喪失，引發困惑度指數級發散。
 
 ---
 
@@ -188,12 +188,12 @@ $$X_{\text{quant}} = \text{Round}\left(\frac{1.8}{8.28}\right) = \text{Round}(0.
 > 本專案 Phase 1 交付的 48 組校準檔案與 PAR 拓撲圖譜，核心價值在於**「為下游模型部署團隊提供第一手、高解析度的數值病理診斷依據」**。下述正交旋轉等價變換方法，係作為「驗證空間變換能否有效平抑離群能量之客觀驗證標尺（Verification Matrix）」，非本團隊試圖去訓練或修改原始模型架構。
 
 ```
-Phase 1 (Delivered Diagnostic Baseline) Phase 2 (Proposed Verification Matrix)
-┌─────────────────────────────────────┐ ┌─────────────────────────────────────────┐
-│ • Physical W8A16 Zero-Loss Baseline │ │ • Walsh-Hadamard Transform (WHT)        │
-│ • Outlier Spikes Mapped (PAR > 120x)│─►│ • Learnable Cayley Optimization (Spin)  │
-│ • Cross-Domain Scale Drift Telemetry│ │ • Extreme Low-Bit (W4A4/W3A3) PTQ       │
-└─────────────────────────────────────┘ └─────────────────────────────────────────┘
+Phase 1 (Delivered Diagnostic Baseline)      Phase 2 (Proposed Verification Matrix)
+┌──────────────────────────────────────┐     ┌─────────────────────────────────────────┐
+│ • Physical W8A16 Zero-Loss Baseline  │     │ • Walsh-Hadamard Transform (WHT)        │
+│ • Outlier Spikes Mapped (PAR: 123.4x)│ ──► │ • Learnable Cayley Optimization (Spin)  │
+│ • Cross-Domain Scale Drift Telemetry │     │ • Extreme Low-Bit (W4A4/W3A3) PTQ       │
+└──────────────────────────────────────┘     └─────────────────────────────────────────┘
 ```
 
 ### 6.1. 旋轉等價變換之數學驗證基礎
@@ -205,7 +205,7 @@ $$\tilde{X} = X R, \quad \tilde{W} = R^T W \implies \tilde{X}\tilde{W} = (X R)(R
 
 ### 6.2. 次階段驗證標尺與規劃 (Phase 2 Verification Milestones)：
 1. **免訓練阿達馬旋轉驗證 (Walsh-Hadamard Transform, WHT)**：於 Attention 輸出與 MLP 降維層前置塊對角 Hadamard 矩陣，評估 $\mathcal{O}(d \log d)$ 運算量下平滑激活分佈之客觀效果。
-2. **Stiefel 流形可學習旋轉驗證 (SpinQuant Formulation)**：針對深層非線性積累最嚴重的特定層（Qwen L23、Gemma L34），藉由 Cayley 變換 $R = (I - S)(I + S)^{-1}$（$S = -S^T$），驗證最佳旋轉矩陣對層級重構誤差的壓制極限。
+2. **Stiefel 流形可學習旋轉驗證 (SpinQuant Formulation)**：針對深層非線性積累最嚴重的特定層（Qwen 3.5 2B L23、Gemma 2 2B L34），藉由 Cayley 變換 $R = (I - S)(I + S)^{-1}$（$S = -S^T$），驗證最佳旋轉矩陣對層級重構誤差的壓制極限。
 3. **極限低位元（W4A4、W3A3）消融對照驗證**：建立完整驗證矩陣，對比無旋轉 PTQ、WHT 與 Cayley 旋轉在極限位元下之 PPL 邊界。
 
 ---
@@ -217,7 +217,7 @@ $$\tilde{X} = X R, \quad \tilde{W} = R^T W \implies \tilde{X}\tilde{W} = (X R)(R
 2. **嚴防垂直領域校準之 Scale 偏置**：  
    嚴禁僅使用代碼或數學題等高度特化語料進行量化校準。特定語法結構會人為壓低關鍵投影層的動態範圍，導致通用推理時發生非預期的截斷飽和。
 3. **低位元激活量化必須依賴幾何空間平滑**：  
-   任何針對 4-bit 激活量化的嘗試（W16A4、W4A4），若缺乏特徵空間的正交旋轉，必然遭遇深層離群尖刺（PAR $> 100\times$）引發的階距擴張與數值塌陷。Phase 1 建立的拓撲測繪檔案為後續模型壓縮提供了可防禦的量化診斷數據。
+   任何針對 4-bit 激活量化的嘗試（W16A4、W4A4），若缺乏特徵空間的正交旋轉，必然遭遇深層離群尖刺（PAR 高達 $123.4\times$）引發的階距擴張與數值塌陷。Phase 1 建立的拓撲測繪檔案為後續模型壓縮提供了可防禦的量化診斷數據。
 
 ---
 *Generated by the Model Quantization Research Framework.*

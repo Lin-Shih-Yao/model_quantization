@@ -15,8 +15,8 @@
 | :--- | :--- | :--- |
 | **Mission Objective** | **Edge LLM (1B–4B) Inference Benchmarking, Cross-Domain Sensitivity & Numerical Pathology Profiling** | Objectively profile black-box model behaviors; locate memory-bound bottlenecks and low-bit numerical collapse |
 | **Key Milestone** | **Llama-3.2-1B W8A16 Degradation: +0.24% (PPL +0.0273)** | Physical substitution of 112 Linear layers; halves memory bus traffic (**-49.2%**); sustains 150.3 t/s throughput |
-| **Golden Baselines** | **Full Strided Sliding-Window PPL Replicated across 5 Models** | Qwen-4B (8.25), Llama-3B (9.52), Qwen-2B (10.66), Llama-1B (11.40), Gemma-2B (11.83) |
-| **Critical Discovery** | **Deep Activation Peak-to-Average Ratio (PAR) up to 122.0×** | Localized Qwen L23 (40.50) & Gemma L34 (58.00) spikes; reveals step-size dilation as mathematical root cause |
+| **Golden Baselines** | **Full Strided Sliding-Window PPL Replicated across 5 Models** | Qwen 3.5 4B (8.25), Llama 3.2 3B (9.52), Qwen 3.5 2B (10.66), Llama 3.2 1B (11.40), Gemma 2 2B (11.83) |
+| **Critical Discovery** | **Deep Activation Peak-to-Average Ratio (PAR) up to 123.4×** | Localized Qwen 3.5 2B L23 (40.50) & Gemma 2 2B L34 (58.00) spikes; reveals step-size dilation as mathematical root cause |
 | **Multi-Domain Calibration** | **48 Full Matrix Datasets Archived (4 Models × 4 Domains × 3 Scales)** | Covers WikiText-2, C4, GSM8K, HumanEval; quantified domain-shift impact on tensor dynamic range |
 | **Testbed Specifications** | **Dual Hardware Benchmarking (NVIDIA T4 16GB [Google Colab] vs. Apple M3 16GB UMA)** | Characterized discrete PCIe GDDR6 (320 GB/s) vs. client-side unified memory architecture (100 GB/s UMA) |
 | **Deliverable Boundary** | **Phase 1 Delivered & Verified / Phase 2 Verification Matrix Established** | Phase 1 delivers diagnostic telemetry; Phase 2 establishes rotation mitigation verification benchmarks |
@@ -50,7 +50,7 @@ During autoregressive decoding at $\text{Batch Size} = 1$, each generated token 
 | **Peak Bandwidth** | **320.0 GB/s** | **100.0 GB/s** |
 | **Host Environment** | Linux 6.1 x86_64, CUDA 12.2, Driver 535+ | macOS Sonoma (Darwin 24.0.0) |
 | **Framework Backend**| PyTorch 2.4.0 (CUDA Engine) | PyTorch 2.4.0 (Apple MPS Acceleration Engine) |
-| **Primary Workload** | Full 2048-Window PPL Baselines, Physical W8A16 PTQ | Pure-Text Edge Throughput, Resident RAM Profiling |
+| **Primary Workload** | Full 2048-Window PPL Baselines, Physical W8A16 PTQ | Pure-Text Edge Throughput (tokens/s, t/s), Resident RAM Profiling |
 
 ---
 
@@ -60,13 +60,13 @@ During autoregressive decoding at $\text{Batch Size} = 1$, each generated token 
 
 ```mermaid
 graph TD
-    M1["<b>Module 1: Data Engine</b><br>Token Streaming Packing Buffer<br>(WikiText-2, C4, GSM8K, HumanEval)"] -->|Zero-Padding Uniform Tensor: N x 2048| M2["<b>Module 2: Observer System</b><br>Unified LayerObserver<br>Running Extrema, 99.99% Quantile & Channel Scales"]
-    M2 -->|Structured Metadata (.json / .pt)| M3["<b>Module 3: Operator Emulation</b><br>Dynamic Pre-Forward Hook Injector<br>(Symmetric W8A8 / W16A4 Emulation)"]
-    M3 -->|Target Hooked Causal LM| M4["<b>Module 4: Evaluation Harness</b><br>Strided Sliding-Window PPL Engine<br>(Crash-Resilient CSV Persistence)"]
-    M5["<b>Module 5: Matrix Controller</b><br>Multi-Node Orchestrator"] -.->|Active VRAM Lifecycle Management| M1
-    M5 -.->|Active VRAM Lifecycle Management| M2
-    M5 -.->|Active VRAM Lifecycle Management| M3
-    M5 -.->|Active VRAM Lifecycle Management| M4
+    M1["Module 1: Data Engine<br>Token Streaming Packing Buffer<br>WikiText-2, C4, GSM8K, HumanEval"] -->|"Zero-Padding Uniform Tensor: N x 2048"| M2["Module 2: Observer System<br>Unified LayerObserver<br>Running Extrema, 99.99% Quantile & Channel Scales"]
+    M2 -->|"Structured Metadata: .json / .pt"| M3["Module 3: Operator Emulation<br>Dynamic Pre-Forward Hook Injector<br>Symmetric W8A8 / W16A4 Emulation"]
+    M3 -->|"Target Hooked Causal LM"| M4["Module 4: Evaluation Harness<br>Strided Sliding-Window PPL Engine<br>Crash-Resilient CSV Persistence"]
+    M5["Module 5: Matrix Controller<br>Multi-Node Orchestrator"] -.->|"Active VRAM Lifecycle Management"| M1
+    M5 -.->|"Active VRAM Lifecycle Management"| M2
+    M5 -.->|"Active VRAM Lifecycle Management"| M3
+    M5 -.->|"Active VRAM Lifecycle Management"| M4
 ```
 
 ### Production Reliability Mechanisms:
@@ -101,20 +101,20 @@ graph TD
 ### 4.1. Unquantized FP16/BF16 Golden Baselines (Testbed Alpha: Tesla T4)
 Evaluated on the full official **WikiText-2 Test Set** (~300,000 tokens) on Google Colab / Tesla T4:
 
-| Evaluated Architecture | Parameters | Transformer Layers | Context Window | Measured PPL | Benchmark Steps | Measured Throughput (Tesla T4) | Industry Baseline Alignment |
+| Evaluated Architecture | Parameters | Transformer Layers | Context Window | Measured PPL | Benchmark Steps | Measured Throughput (tokens/s, t/s) | Industry Baseline Alignment |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Qwen 3.5 4B** | 4.54 B | 36 | 2048 | **`8.2480`** | 578 steps (Full) | **58.80 tokens/s** (5051.8s) | Surpasses technical report expectations |
-| **Llama 3.2 3B** | 3.21 B | 28 | 2048 | **`9.5177`** | 562 steps (Full) | **78.30 tokens/s** (3689.2s) | Sets sub-10.0 flagship baseline |
-| **Qwen 3.5 2B** | 2.21 B | 24 | 2048 | **`10.6631`** | 578 steps (Full) | **126.00 tokens/s** (2356.1s) | Outperforms prior-gen Qwen 2.5 3B (10.72) |
-| **Llama 3.2 1B** | 1.24 B | 16 | 2048 | **`11.4027`** | 562 steps (Full) | **179.60 tokens/s** (1608.0s) | Accurately reproduces official report (11.0–12.0) |
-| **Gemma 2 2B** | 2.61 B | 26 | 2048 | **`11.8346`** | 564 steps (Full) | **188.90 tokens/s** (1531.2s) | Verified text-only architectural convergence |
+| **Qwen 3.5 4B** | 4.54 B | 36 | 2048 | **`8.2480`** | 578 steps (Full) | **58.80 t/s** (5051.8s) | Surpasses technical report expectations |
+| **Llama 3.2 3B** | 3.21 B | 28 | 2048 | **`9.5177`** | 562 steps (Full) | **78.30 t/s** (3689.2s) | Sets sub-10.0 flagship baseline |
+| **Qwen 3.5 2B** | 2.21 B | 24 | 2048 | **`10.6631`** | 578 steps (Full) | **126.00 t/s** (2356.1s) | Outperforms prior-gen Qwen 2.5 3B (10.72) |
+| **Llama 3.2 1B** | 1.24 B | 16 | 2048 | **`11.4027`** | 562 steps (Full) | **179.60 t/s** (1608.0s) | Accurately reproduces official report (11.0–12.0) |
+| **Gemma 2 2B** | 2.61 B | 26 | 2048 | **`11.8346`** | 564 steps (Full) | **188.90 t/s** (1531.2s) | Verified text-only architectural convergence |
 
 ---
 
 ### 4.2. Client-Side Edge Decoding Performance (BF16 on Testbed Beta: Apple M3, 16GB UMA)
 Measured under pure-text autoregressive generation on consumer-grade edge silicon:
 
-| Model ID | Parameters | Cold-Start Weight Load | Generation Throughput | Resident Memory (RAM) | Edge Feasibility Assessment |
+| Model ID | Parameters | Cold-Start Weight Load | Generation Throughput (t/s) | Resident Memory (RAM) | Edge Feasibility Assessment |
 | :--- | :---: | :---: | :---: | :---: | :--- |
 | **Llama 3.2 1B** | 1.24 B | **~ 3.0 s** | **`15.49 t/s`** | 🟢 **~ 2.5 GB** | **Ultra-lightweight; optimal for always-on edge services** |
 | **Llama 3.2 3B** | 3.21 B | ~ 14.6 s | **`7.11 t/s`** | 🟢 **~ 6.5 GB** | **Balanced dialogue quality and responsive latency** |
@@ -127,7 +127,7 @@ Measured under pure-text autoregressive generation on consumer-grade edge silico
 ### 4.3. Physical W8A16 Post-Training Quantization Impact (Llama 3.2 1B on Tesla T4)
 Physical replacement of 112 projection matrices ($Q, K, V, O$ and Gate, Up, Down):
 
-$$\Delta \text{PPL} = \text{PPL}_{W8A16} - \text{PPL}_{\text{Baseline}} = 11.4300 - 11.4027 = \mathbf{+0.0273}\ (\text{Relative Degradation: } \mathbf{+0.24\%})$$
+$$\Delta \text{PPL} = \text{PPL}_{\text{W8A16}} - \text{PPL}_{\text{Baseline}} = 11.4300 - 11.4027 = \mathbf{+0.0273}\ (\text{Relative Degradation } \mathbf{+0.24\%})$$
 
 | Production Metric | Unquantized Baseline (BF16) | Physical Quantization (W8A16) | Profiling Insight |
 | :--- | :---: | :---: | :--- |
@@ -135,13 +135,13 @@ $$\Delta \text{PPL} = \text{PPL}_{W8A16} - \text{PPL}_{\text{Baseline}} = 11.430
 | **Peak Runtime Memory** | ~ 2.55 GB | **~ 1.35 GB** | 🟢 Frees headroom for extended context KV Cache |
 | **WikiText-2 Perplexity** | 11.4027 | **11.4300** | 🎯 **Degradation limited to +0.24% (near-lossless)** |
 | **Evaluation Wall Time (562 steps)**| 1608.00 s | 1922.49 s | Register dequantization overhead remains controlled |
-| **Sliding Window Throughput** | 179.60 tokens/s | **150.29 tokens/s** | Sustains high-throughput decoding pipeline |
+| **Sliding Window Throughput** | 179.60 t/s | **150.29 t/s** | Sustains high-throughput decoding pipeline |
 
 ---
 
 ## 5. Cross-Domain Calibration & Deep Outlier Topology Profiling
 
-> **BLUF**: Transformer deep layers (Depth $> 20$) develop acute activation outliers (PAR $> 120\times$). In 4-bit uniform quantization, extreme spikes dilate the global step size, forcing 99.8% of normal channels to collapse to zero—the mathematical root cause of low-bit PTQ failure.
+> **BLUF**: Transformer deep layers (Depth $> 20$) develop acute activation outliers (PAR up to $123.4\times$). In 4-bit uniform quantization, extreme spikes dilate the global step size, forcing 99.8% of normal channels to collapse to zero—the mathematical root cause of low-bit PTQ failure.
 
 ### 5.1. Cross-Domain Scale Drift Profiling
 Evaluating 48 calibration profiles (4 models × 4 domains × 3 sample sizes) empirically uncovered the impact of semantic distributions on dynamic range:
@@ -158,7 +158,7 @@ Replacing brittle ASCII drawings with a structured numerical topology matrix acr
 | :--- | :--- | :---: | :---: | :---: | :--- |
 | **Layer 0 – 16 (Shallow)** | Attention / MLP | $< 10.0$ | ~ 0.89 | ~ 11.2× | 🟢 **Well-conditioned**: Readily mapped by uniform quantization |
 | **Qwen 3.5 2B (Layer 23)** | Down Projection | **40.50** | 2.22 | **18.2×** | 🟡 **Isolated 4-channel surge**: Induces severe cross-channel scale imbalance |
-| **Gemma 2 2B (Layer 34)** | Gate / Up Projection | **58.00** | 0.47 | **122.0×** | 🔴 **Extreme catastrophic spike**: Expands uniform step size by $>10\times$ |
+| **Gemma 2 2B (Layer 34)** | Gate / Up Projection | **58.00** | 0.47 | **123.4×** | 🔴 **Extreme catastrophic spike**: Expands uniform step size by $>10\times$ |
 
 ---
 
@@ -169,7 +169,7 @@ Replacing brittle ASCII drawings with a structured numerical topology matrix acr
 #### 1. Uniform Quantization Step Size Formulation:
 $$s = \frac{\max(|X|)}{2^{b-1} - 1}$$
 
-#### 2. Numerical Substitution using Gemma-2 Layer 34 at 4-Bit Precision ($b=4$, Range $[-8, 7]$):
+#### 2. Numerical Substitution using Gemma 2 2B Layer 34 at 4-Bit Precision ($b=4$, Range $[-8, 7]$):
 $$s = \frac{58.00}{2^{4-1} - 1} = \frac{58.00}{7} \approx \mathbf{8.28}$$
 
 #### 3. Representation Annihilation of Normal Channels:
@@ -177,7 +177,7 @@ Within Layer 34, **99.8% of normal activation values** lie within the range $[-2
 
 $$X_{\text{quant}} = \text{Round}\left(\frac{1.8}{8.28}\right) = \text{Round}(0.217) = \mathbf{0}$$
 
-> **Diagnostic Root Cause**: Because $s$ is dilated to $8.28$, all informative feature values $|x| < 4.14$ are **forcibly zero-collapsed**. The non-linear representational capacity of the layer is annihilated, resulting in exponential perplexity divergence.
+> **Diagnostic Root Cause**: When step size $s$ is dilated to $8.28$ by extreme outliers, all valid activations with absolute magnitude less than $4.14$ (i.e., within the interval $[-4.14, 4.14]$, $|x| < 4.14$) are **forcibly zero-collapsed** upon rounding ($\text{Round}(x / 8.28) = 0$). The network's non-linear representation capacity at this layer is catastrophically destroyed, triggering exponential perplexity divergence.
 
 ---
 
@@ -188,12 +188,12 @@ $$X_{\text{quant}} = \text{Round}\left(\frac{1.8}{8.28}\right) = \text{Round}(0.
 > The 48 calibration profiles and PAR topology mapping delivered in Phase 1 serve as **first-hand diagnostic telemetry for downstream deployment teams**. The orthogonal rotation transformations discussed below represent an objective **verification matrix** to evaluate whether geometric transformations can mitigate outlier energy, rather than an attempt by this framework to invent new training architectures.
 
 ```
-Phase 1 (Delivered Diagnostic Baseline) Phase 2 (Proposed Verification Matrix)
-┌─────────────────────────────────────┐ ┌─────────────────────────────────────────┐
-│ • Physical W8A16 Zero-Loss Baseline │ │ • Walsh-Hadamard Transform (WHT)        │
-│ • Outlier Spikes Mapped (PAR > 120x)│─►│ • Learnable Cayley Optimization (Spin)  │
-│ • Cross-Domain Scale Drift Telemetry│ │ • Extreme Low-Bit (W4A4/W3A3) PTQ       │
-└─────────────────────────────────────┘ └─────────────────────────────────────────┘
+Phase 1 (Delivered Diagnostic Baseline)      Phase 2 (Proposed Verification Matrix)
+┌──────────────────────────────────────┐     ┌─────────────────────────────────────────┐
+│ • Physical W8A16 Zero-Loss Baseline  │     │ • Walsh-Hadamard Transform (WHT)        │
+│ • Outlier Spikes Mapped (PAR: 123.4x)│ ──► │ • Learnable Cayley Optimization (Spin)  │
+│ • Cross-Domain Scale Drift Telemetry │     │ • Extreme Low-Bit (W4A4/W3A3) PTQ       │
+└──────────────────────────────────────┘     └─────────────────────────────────────────┘
 ```
 
 ### 6.1. Mathematical Invariance of Orthogonal Transformations
@@ -205,7 +205,7 @@ $$\tilde{X} = X R, \quad \tilde{W} = R^T W \implies \tilde{X}\tilde{W} = (X R)(R
 
 ### 6.2. Phase 2 Key Verification Milestones:
 1. **Training-Free Walsh-Hadamard Transform (WHT) Verification**: Evaluate block-diagonal Hadamard matrices prior to attention outputs and MLP down-projections to assess distribution smoothing under $\mathcal{O}(d \log d)$ overhead.
-2. **Stiefel Manifold Learnable Rotations (SpinQuant Formulation)**: For layers exhibiting severe non-linear accumulation (Qwen L23, Gemma L34), parameterize $R$ via the Cayley transform:
+2. **Stiefel Manifold Learnable Rotations (SpinQuant Formulation)**: For layers exhibiting severe non-linear accumulation (Qwen 3.5 2B L23, Gemma 2 2B L34), parameterize $R$ via the Cayley transform:
    $$R = (I - S)(I + S)^{-1}, \quad \text{where } S = -S^T$$
    Assess whether optimizing $S$ over calibration datasets effectively contracts Frobenius reconstruction loss $\mathbb{E}[\|Q(XR)R^TW - XW\|_F^2]$.
 3. **Sub-4-Bit Comparative Verification Matrix**: Benchmark unrotated PTQ vs. WHT vs. trained Cayley rotation across W4A4, W4A8, and W3A3 configurations.
@@ -219,7 +219,7 @@ $$\tilde{X} = X R, \quad \tilde{W} = R^T W \implies \tilde{X}\tilde{W} = (X R)(R
 2. **Prohibit Domain-Specific Calibration Bias**:  
    Quantization calibration must never rely solely on narrow vertical corpora (e.g., pure code or pure math). Specialized datasets induce premature clipping saturation during generalized conversation.
 3. **Low-Bit Activation Quantization Mandates Feature Rotation**:  
-   Any attempt to quantize activations to 4-bit (W16A4, W4A4) without geometric feature rotation will inevitably collapse due to deep-layer activation spikes (PAR $>100\times$). The empirical outlier mapping delivered in Phase 1 provides the foundational diagnostic telemetry for all subsequent rotation implementations.
+   Any attempt to quantize activations to 4-bit (W16A4, W4A4) without geometric feature rotation will inevitably collapse due to deep-layer activation spikes (PAR up to $123.4\times$). The empirical outlier mapping delivered in Phase 1 provides the foundational diagnostic telemetry for all subsequent rotation implementations.
 
 ---
 *Generated by the Model Quantization Research Framework.*

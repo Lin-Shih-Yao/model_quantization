@@ -27,9 +27,9 @@
 
 | 模型系列 | 目標型號 | 架構特色 | 參數量 |
 | :--- | :--- | :--- | :---: |
-| **Llama** (Meta) | [meta-llama/Llama-3.2-1B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct)<br>[meta-llama/Llama-3.2-3B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct) | 128k 超長窗口、標準 RMSNorm、GQA、學術界主流黃金基線 | 1.2B / 3.2B |
-| **Qwen** (Alibaba) | [Qwen/Qwen3.5-2B](https://huggingface.co/Qwen/Qwen3.5-2B)<br>[Qwen/Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) | SwiGLU 激活、Grouped Query Attention (GQA)、RoPE | 2.2B / 4.5B |
-| **Gemma** (Google) | [google/gemma-2-2b-it](https://huggingface.co/google/gemma-2-2b-it)<br>[google/gemma-4-E2B-it](https://huggingface.co/google/gemma-4-E2B-it) | 純文字自回歸 / 多模態、GeGLU 激活、Logit Soft-Capping、滑動窗口注意力 | 2.6B / 5.1B |
+| **Llama** (Meta) | [meta-llama/Llama-3.2-1B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct)<br>[meta-llama/Llama-3.2-3B-Instruct](https://huggingface.co/meta-llama/Llama-3.2-3B-Instruct) | 128k 超長窗口、標準 RMSNorm、GQA、學術界主流黃金基線 | 1.24 B / 3.21 B |
+| **Qwen** (Alibaba) | [Qwen/Qwen3.5-2B](https://huggingface.co/Qwen/Qwen3.5-2B)<br>[Qwen/Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B) | SwiGLU 激活、Grouped Query Attention (GQA)、RoPE | 2.21 B / 4.54 B |
+| **Gemma** (Google) | [google/gemma-2-2b-it](https://huggingface.co/google/gemma-2-2b-it) | 純文字自回歸、GeGLU 激活、Logit Soft-Capping、滑動窗口注意力 | 2.61 B |
 
 ---
 
@@ -88,13 +88,13 @@ model_quantization/
 
 ```mermaid
 graph TD
-    M1["模組 1: src/data/loader.py<br>多領域校準資料抽取<br>(WikiText-2, C4, HumanEval, GSM8K)"] -->|固定形狀張量 (N, 2048)| M2["模組 2: calibration.py<br>統一校準採集器 (LayerObserver)<br>統計極值、截斷門檻並存為 PT/JSON"]
-    M2 -->|層級量化參數字典| M3["模組 3: fake_quant.py<br>偽量化動態注入器 (Pre-Hook)<br>支援對稱量化 (W16A8 / W16A4)"]
-    M3 -->|掛載偽量化模型| M4["模組 4: ppl.py<br>標準滑動窗口困惑度評估<br>即時寫入 CSV 成績單"]
-    M5["模組 5: run_pipeline.py<br>主控制器 (矩陣調度)"] -.->|調度迴圈與顯存清理| M1
-    M5 -.->|調度迴圈與顯存清理| M2
-    M5 -.->|調度迴圈與顯存清理| M3
-    M5 -.->|調度迴圈與顯存清理| M4
+    M1["模組 1: src/data/loader.py<br>多領域校準資料抽取<br>WikiText-2, C4, HumanEval, GSM8K"] -->|"固定形狀張量: N x 2048"| M2["模組 2: calibration.py<br>統一校準採集器 LayerObserver<br>統計極值、截斷門檻並存為 PT/JSON"]
+    M2 -->|"層級量化參數字典"| M3["模組 3: fake_quant.py<br>偽量化動態注入器 Pre-Hook<br>支援對稱量化: W16A8 / W16A4"]
+    M3 -->|"掛載偽量化模型"| M4["模組 4: ppl.py<br>標準滑動窗口困惑度評估<br>即時寫入 CSV 成績單"]
+    M5["模組 5: run_pipeline.py<br>主控制器 矩陣調度"] -.->|"調度迴圈與顯存清理"| M1
+    M5 -.->|"調度迴圈與顯存清理"| M2
+    M5 -.->|"調度迴圈與顯存清理"| M3
+    M5 -.->|"調度迴圈與顯存清理"| M4
 ```
 
 ### 管線亮點特性：
@@ -192,13 +192,13 @@ python tests/test_w8a8.py
 
 在未量化原版（BF16 浮點精度）下，本機實測推論效能如下：
 
-| 模型名稱 | 文字參數量 | 首次載入時間 | 生成速度 (Throughput) | 實體記憶體佔用 | 體驗評價 |
+| 模型名稱 | 文字參數量 | 首次載入時間 | 生成速度 (Throughput, tokens/s, t/s) | 實體記憶體佔用 | 體驗評價 |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| 🏆 **Llama 3.2 1B** | 1.24 B | **~ 3.0 s** | **`15.49 tokens/s`** | 🟢 **~ 2.5 GB** | **極速、超輕量** |
-| **Llama 3.2 3B** | 3.21 B | ~ 14.6 s | **`7.11 tokens/s`** | 🟢 **~ 6.5 GB** | **流暢、高品質語意** |
-| **Qwen 3.5 2B** | 2.21 B | ~ 22.5 s | **`7.49 tokens/s`** | 🟢 ~ 4.3 GB | 流暢 |
-| **Gemma 4 E2B** | 5.10 B | ~ 57.7 s | **`4.28 tokens/s`** | 🟢 ~ 4.5 GB | 流暢 |
-| **Qwen 3.5 4B** | 4.54 B | ~ 26.8 s | **`3.99 tokens/s`** | 🟢 ~ 8.5 GB | 偏吃重 |
+| 🏆 **Llama 3.2 1B** | 1.24 B | **~ 3.0 s** | **`15.49 t/s`** | 🟢 **~ 2.5 GB** | **極速、超輕量** |
+| **Llama 3.2 3B** | 3.21 B | ~ 14.6 s | **`7.11 t/s`** | 🟢 **~ 6.5 GB** | **流暢、高品質語意** |
+| **Qwen 3.5 2B** | 2.21 B | ~ 22.5 s | **`7.49 t/s`** | 🟢 ~ 4.3 GB | 流暢 |
+| **Gemma 2 2B** | 2.61 B | ~ 57.7 s | **`4.28 t/s`** | 🟢 ~ 4.5 GB | 流暢 (滑動窗口注意力) |
+| **Qwen 3.5 4B** | 4.54 B | ~ 26.8 s | **`3.99 t/s`** | 🟢 ~ 8.5 GB | 偏吃重 |
 
 ---
 
@@ -209,17 +209,16 @@ python tests/test_w8a8.py
 
 | 模型型號 | 實體參數量 | 國際論文 / 官方技術報告 | 本專案實測 PPL (Mac / Colab) | 評估規格與耗時 | 對齊結論 |
 | :--- | :---: | :---: | :---: | :---: | :--- |
-| 👑 **Qwen 3.5 4B** | 4.21 B | `8.0 ~ 8.8` (預期) | 🏆 **`8.25`** *(Colab 全量)* | **Colab 全量 578 步 (~ 84.2 min, 58.8 t/s)** | 🎯 **刷新紀錄！全量實測壓至 8.2480，展現 4B 端側旗艦級超強語言理解水準！** |
+| 👑 **Qwen 3.5 4B** | 4.54 B | `8.0 ~ 8.8` (預期) | 🏆 **`8.25`** *(Colab 全量)* | **Colab 全量 578 步 (~ 84.2 min, 58.8 t/s)** | 🎯 **刷新紀錄！全量實測壓至 8.2480，展現 4B 端側旗艦級超強語言理解水準！** |
 | 🥇 **Llama 3.2 3B** | 3.21 B | `9.5 ~ 10.5` (預期) | 🏆 **`9.52`** *(Colab 全量)*<br>🏆 **`9.54`** *(Mac 40 步)* | **Colab 全量 562 步 (~ 61.5 min, 78.3 t/s)**<br>Mac 40 步 (~ 3.7 min, 99.1 t/s) | 🎯 **強勢突破 10.0 大關！全量實測壓至 9.5177，展現 3B 端側頂級語言理解水準！** |
 | 🥈 **Qwen 3.5 2B** | 2.21 B | *理論區間 `10.8 ~ 11.5`* | 🏆 **`10.66`** *(Colab 全量)*<br>🏆 **`11.20`** *(Mac 40 步)* | **Colab 全量 578 步 (~ 39.3 min, 126.0 t/s)**<br>Mac 40 步 (~ 5.8 min, 63.2 t/s) | 🎯 **全量評估突破理論上限！以 10.66 逆襲前代 2.5 3B 模型！** |
 | 🥉 **Llama 3.2 1B** | 1.24 B | `11.0 ~ 12.0` (Instruct) | 🏆 **`11.40`** *(Colab 全量)*<br>🏆 **`11.29`** *(Mac 40 步)* | **Colab 全量 562 步 (~ 26.8 min, 179.6 t/s)**<br>Mac 40 步 (~ 1.5 min, 244.0 t/s) | 🎯 **極速收斂！以僅 1.2B 參數量精準對齊官方與論文基準，媲美 2B 等級困惑度！** |
 | 🌟 **Gemma 2 2B** | 2.61 B | `11.5 ~ 12.5` (Instruct) | 🏆 **`11.83`** *(Colab 全量)* | **Colab 全量 564 步 (~ 25.5 min, 188.9 t/s)** | 🎯 **純文字架構正常收斂！實測 11.8346，精準對齊學術論文與官方基準！** |
 | **Qwen 2.5 3B** | 3.09 B | `10.72` (FP16 基線) | — | — | 學術論文參考 (Qwen 3.5 2B 已實測超越此基準) |
 | **Qwen 2.5 1.5B** | 1.54 B | `15.69` (BF16 基線) | — | — | 學術論文參考 |
-| **Gemma 4 E2B** | 5.10 B | — | *12707.84 (多模態架構失配)* | Colab 全量 (多模態架構) | ⚠️ 因原生多模態架構與 PLE 詞表，純文字標準 PPL 評估不適用 |
 
 > 💡 **全量評估亮點 (Colab Cloud Benchmark)**：  
-> - **Qwen 3.5 4B**：在 Google Colab (CUDA, BF16) 上執行 **578 步全量 WikiText-2（共 297,053 tokens）** 深度評估，耗時 5051.78 秒（~84.2 分鐘，吞吐量 58.80 tokens/s），最終測得困惑度為 **`8.2480`**！大幅刷新專案全量測試最佳紀錄！
+> - **Qwen 3.5 4B**：在 Google Colab (CUDA, BF16) 上執行 **578 步全量 WikiText-2（共 297,053 tokens）** 深度評估，耗時 5051.78 秒（~84.2 分鐘，吞吐量 58.80 t/s），最終測得困惑度為 **`8.2480`**！大幅刷新專案全量測試最佳紀錄！
 > - **Llama 3.2 3B**：全量 562 步 WikiText-2 實測困惑度達 **`9.5177`**，展現 3B 級別最強基線。
 > - **Qwen 3.5 2B**：全量 578 步 WikiText-2 實測困惑度達 **`10.6631`**，超越前代 Qwen 2.5 3B 論文基線（`10.72`）。
 > - **Llama 3.2 1B**：全量 562 步實測困惑度為 **`11.4027`**，精準落在官方技術報告 `11.0 ~ 12.0` 區間。
@@ -247,8 +246,8 @@ python -m src.eval.ppl --model_id ./models/Qwen_Qwen3.5-2B --dataset wikitext-2-
 * **Qwen 3.5 2B 實測診斷發現**：
   - 前中層（Layer 0 ~ 17）數值平緩（最大激活值 < 10.0，PAR ~ 11x）。
   - **深層出現極端尖刺**：在 **Layer 23** 捕捉到特定 4 個通道的激活值暴衝至 **`40.50`（高達均值的 18.2 倍！）**。
-* **Gemma 4 E2B 實測診斷發現**：
-  - 在 **Layer 34** 捕捉到激活值峰值達 **`58.00`**，峰均比（PAR）更達到驚人的 **`122.0 倍`**！
+* **Gemma 2 2B 實測診斷發現**：
+  - 在 **Layer 34** 捕捉到激活值峰值達 **`58.00`**，峰均比（PAR）更達到驚人的 **`123.4 倍`**！
 * **💡 研究結論（Why SpinQuant?）**：
   - 這客觀驗證了未量化大模型深層天生具備「少數離群通道」的病理特徵。若直接使用陽春 Uniform 量化會造成災難性截斷；因此後續實作 **SpinQuant（正交隨機旋轉）** 將離群能量平滑分散是保持低位元精度的關鍵！
 

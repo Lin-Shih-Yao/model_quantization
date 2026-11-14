@@ -82,18 +82,7 @@ Through forward-hook activation profiling, we mapped internal activation spikes 
 * **Qwen 3.5 2B (Layer 23):** Isolated channels surge to **`40.50`** (18.2× the layer mean).
 * **Gemma 2 2B (Layer 34):** Peak activations reach **`58.00`** with a **`123.4×` Peak-to-Average Ratio**.
 
-These empirical findings illustrate why standard uniform quantization suffers catastrophic collapse under 4-bit activations (A4) due to step-size dilation, providing the diagnostic foundation for future Phase 2 research into orthogonal feature rotations.
-
----
-
-## 🗺️ Roadmap: Planned Phase 2 Research
-
-> ⚠️ **Phase 2 Status**:  
-> The methodologies below represent planned research directions designed to mitigate the activation spikes identified in Phase 1. They are not yet implemented in the current codebase.
-
-* [ ] **Walsh-Hadamard Transform (WHT):** Implement training-free block-diagonal Hadamard transforms to distribute channel peak energy across hidden dimensions.
-* [ ] **Learnable Cayley Rotations (SpinQuant Architecture):** Optimize orthogonal matrices over the Stiefel manifold to minimize per-layer reconstruction error.
-* [ ] **Sub-4-Bit Activation Benchmarking:** Benchmark extreme precision targets (W4A4, W3A3) comparing unrotated vs. rotated representations.
+These empirical findings illustrate why standard uniform quantization suffers catastrophic collapse under 4-bit activations (A4) due to step-size dilation, providing the diagnostic foundation for future research into orthogonal feature rotations.
 
 ---
 
@@ -179,6 +168,16 @@ model_quantization/
 │   └── download_model.py      # Unified model weight downloader
 └── tests/                     # Unit test suites (Calibration, Fake Quant, W8A16, W8A8)
 ```
+
+---
+
+## 🗺️ Future Work (Not Yet Implemented)
+
+> ⚠️ **Scope Note**: The items below are planned research directions motivated by our activation outlier diagnostics and are **not yet implemented** in this repository.
+
+* [ ] **Walsh-Hadamard Transform (WHT):** Training-free block-diagonal Hadamard transforms to distribute channel peak energy across hidden dimensions.
+* [ ] **Learnable Cayley Rotations (SpinQuant Architecture):** Optimizing orthogonal matrices over the Stiefel manifold to minimize per-layer reconstruction error.
+* [ ] **Sub-4-Bit Activation Benchmarking:** Comparing unrotated vs. rotated representations under extreme precision targets (W4A4, W3A3).
 
 ---
 

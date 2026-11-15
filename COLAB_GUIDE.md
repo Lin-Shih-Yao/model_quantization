@@ -122,6 +122,39 @@ drive.mount('/content/drive')
 !python -m src.eval.ppl --model_id meta-llama/Llama-3.2-1B-Instruct --max_steps 40
 ```
 
+#### 🧪 Mode E: Downstream Task Evaluation & Raw Output Persistence (`src/eval/downstream.py`)
+> **Instructions for Colab Gemini Assistant**:  
+> Always pass `--output_dir /content/drive/MyDrive/model_quantization/results` so that raw `.jsonl` predictions and `summary.csv` are persisted directly to Google Drive.  
+> - Use `python -m src.eval.ppl` for Perplexity (PPL) and `python -m src.eval.downstream` for downstream generation tasks (`gsm8k`, `humaneval`).  
+> - Do **not** write custom inference loops in notebook cells.  
+> - Every generation sample is flushed immediately to `results/raw/{model}__{quant}__{task}.jsonl` and supports automatic resume if Colab disconnects (re-running the same command skips already-completed sample IDs).  
+> - For `w8a8`, pass a `.pt` file from `calibration/` to `--calib_file`. For `fake_w16a8` / `fake_w16a4`, `--calib_file` accepts `.json` or `.pt`.  
+> - On T4 GPUs, prefer `--dtype float16` if `bfloat16` causes unsupported-kernel slowdowns.
+
+```bash
+# 1. Baseline (none) + Physical W8A16 on GSM8K (200 samples) and HumanEval (164 samples)
+!python -m src.eval.downstream \
+  --model_id meta-llama/Llama-3.2-1B-Instruct \
+  --quant_methods none w8a16 \
+  --tasks gsm8k humaneval \
+  --limit 200 \
+  --dtype float16 \
+  --output_dir /content/drive/MyDrive/model_quantization/results
+
+# 2. Fake-quantized W16A4 (accepts .json or .pt)
+!python -m src.eval.downstream \
+  --model_id meta-llama/Llama-3.2-1B-Instruct \
+  --quant_methods fake_w16a4 \
+  --calib_file calibration_results/calibration_stats/stats_Node_A_Llama-3.2-1B-Instruct_wikitext2_N128.json \
+  --tasks gsm8k humaneval \
+  --limit 200 \
+  --dtype float16 \
+  --output_dir /content/drive/MyDrive/model_quantization/results
+
+# 3. CPU-only re-scoring of saved raw/*.jsonl files (no GPU needed)
+!python -m src.eval.downstream --score_only --output_dir /content/drive/MyDrive/model_quantization/results
+```
+
 ---
 
 ## ⚠️ 4. Production Environment Safety Rules

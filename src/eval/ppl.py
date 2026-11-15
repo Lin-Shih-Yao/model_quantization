@@ -36,6 +36,7 @@ def evaluate_ppl(
     dataset_name: str = "Salesforce/wikitext",
     dataset_config: str = "wikitext-2-raw-v1",
     dataset_split: str = "test",
+    max_docs: int | None = None,
 ) -> dict:
     """
     Computes Perplexity (PPL) for Causal LMs following Hugging Face's official strided sliding window algorithm.
@@ -55,9 +56,21 @@ def evaluate_ppl(
             "total_steps": int,
         }
     """
-    # 1. Load benchmark dataset
-    dataset = load_dataset(dataset_name, dataset_config, split=dataset_split)
-    full_text = "\n\n".join([t for t in dataset["text"] if t.strip()])
+    # 1. Load benchmark dataset (use streaming for large corpora like C4)
+    if dataset_name == "allenai/c4" or max_docs is not None:
+        stream_ds = load_dataset(dataset_name, dataset_config, split=dataset_split, streaming=True)
+        doc_limit = max_docs or 500
+        texts = []
+        for item in stream_ds:
+            text = item.get("text", "")
+            if text.strip():
+                texts.append(text)
+            if len(texts) >= doc_limit:
+                break
+        full_text = "\n\n".join(texts)
+    else:
+        dataset = load_dataset(dataset_name, dataset_config, split=dataset_split)
+        full_text = "\n\n".join([t for t in dataset["text"] if t.strip()])
 
     # 2. Tokenize full corpus
     encodings = tokenizer(full_text, return_tensors="pt")

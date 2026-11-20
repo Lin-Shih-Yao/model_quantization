@@ -52,8 +52,10 @@ def _exec_worker(code: str, test_code: str, entry_point: str, queue: multiproces
         queue.put("pass")
     except SyntaxError:
         queue.put("syntax_error")
+    except AssertionError:
+        queue.put("assertion_error")
     except Exception:
-        queue.put("fail")
+        queue.put("runtime_error")
 
 
 def _evaluate_sample(code: str, test_code: str, entry_point: str, timeout_sec: float = 5.0) -> str:
@@ -71,25 +73,40 @@ def _evaluate_sample(code: str, test_code: str, entry_point: str, timeout_sec: f
         proc.terminate()
         proc.join()
         return "timeout"
-    return queue.get() if not queue.empty() else "fail"
+    return queue.get() if not queue.empty() else "runtime_error"
 
 
-def score_records(records: list[dict]) -> dict:
-    """Computes pass@1 and syntax_error_rate over HumanEval records."""
-    passed = 0
-    syntax_errors = 0
+def analyze_records(records: list[dict]) -> dict:
+    """Categorizes HumanEval predictions into pass and execution failure modes."""
+    counts = {
+        "pass": 0,
+        "assertion_error": 0,
+        "runtime_error": 0,
+        "syntax_error": 0,
+        "timeout": 0,
+    }
     for r in records:
         code = _extract_python_code(r["prediction"], r.get("raw_prompt") or "")
         status = _evaluate_sample(code, r["ground_truth"], r["entry_point"])
-        if status == "pass":
-            passed += 1
-        elif status == "syntax_error":
-            syntax_errors += 1
+        counts[status] = counts.get(status, 0) + 1
 
-    total = len(records)
+    total = max(len(records), 1)
+    rates = {k: round(v / total, 4) for k, v in counts.items()}
+    return {"total": len(records), "counts": counts, "rates": rates}
+
+
+def score_records(records: list[dict]) -> dict:
+    """Computes pass@1 and failure mode breakdown over HumanEval records."""
+    analysis = analyze_records(records)
+    rates = analysis["rates"]
     return {
         "primary_metric": "pass_at_1",
-        "primary_value": round(passed / total, 4),
-        "secondary_metrics": {"syntax_error_rate": round(syntax_errors / total, 4)},
+        "primary_value": rates["pass"],
+        "secondary_metrics": {
+            "assertion_error_rate": rates["assertion_error"],
+            "runtime_error_rate": rates["runtime_error"],
+            "syntax_error_rate": rates["syntax_error"],
+            "timeout_rate": rates["timeout"],
+        },
     }
 

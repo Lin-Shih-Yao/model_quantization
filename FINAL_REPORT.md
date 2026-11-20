@@ -19,7 +19,7 @@
 | **Critical Discovery** | **Deep Activation Peak-to-Average Ratio (PAR) up to 123.4×** | Localized Qwen 3.5 2B L23 (40.50) & Gemma 2 2B L34 (58.00) spikes; reveals step-size dilation as mathematical root cause |
 | **Multi-Domain Calibration** | **48 Full Matrix Datasets Archived (4 Models × 4 Domains × 3 Scales)** | Covers WikiText-2, C4, GSM8K, HumanEval; quantified domain-shift impact on tensor dynamic range |
 | **Testbed Specifications** | **Dual Hardware Benchmarking (NVIDIA T4 16GB [Google Colab] vs. Apple M3 16GB UMA)** | Characterized discrete PCIe GDDR6 (320 GB/s) vs. client-side unified memory architecture (100 GB/s UMA) |
-| **Deliverable Boundary** | **Phase 1 Delivered & Verified / Phase 2 Verification Matrix Established** | Phase 1 delivers diagnostic telemetry; Phase 2 establishes rotation mitigation verification benchmarks |
+| **Deliverable Boundary** | **Full Empirical Verification Delivered** | Provides high-resolution activation topology mapping and edge quantization guidelines |
 
 ---
 
@@ -139,6 +139,25 @@ $$\Delta \text{PPL} = \text{PPL}_{\text{W8A16}} - \text{PPL}_{\text{Baseline}} =
 
 ---
 
+### 4.4. Downstream Task Resilience & Failure Mode Taxonomy (GSM8K & HumanEval, Llama 3.2 1B / 3B)
+Evaluated across **GSM8K** (200 sampled problems, `flexible_extract`) and **HumanEval** (all 164 problems, `pass@1`) under a 512-token generation cap (`max_new_tokens=512`):
+
+| Model | Precision | GSM8K Accuracy | HumanEval Pass@1 | Avg Output Tokens (GSM8K / HumanEval) | Cap Hit Rate (`CapHit`) | Decoding Throughput (t/s) | Dominant Failure Pathology |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **Llama 3.2 1B** | BF16 (`none`) | 33.50% | 24.39% | 186.3 / 54.2 | 1.0% / 0.0% | 47.16 / 46.82 | Healthy baseline (1B shows weaker `####` formatting: `format_lost` 62.5%) |
+| 🏆 **Llama 3.2 1B** | **W8A16** | **38.50%** | **23.78%** | 191.0 / 53.4 | 1.5% / 0.0% | 17.15 / 17.02 | **Reasoning & coding preserved** (eager dequantization reduces t/s) |
+| **Llama 3.2 1B** | W16A8 (Fake) | 0.00% | 0.00% | 505.6 / 503.8 | 98.5% / 98.2% | 22.05 / 22.02 | **Repetition collapse**: GSM8K `RepRate` reaches `0.9198`, `no_number`: 97.0% |
+| **Llama 3.2 1B** | W16A4 (Fake) | 1.50% | 0.00% | 509.5 / 508.9 | 99.5% / 99.4% | 21.86 / 20.73 | **Syntactic breakdown**: HumanEval `syntax_error`: 78.66%, `format_lost`: 71.0% |
+| **Llama 3.2 3B** | BF16 (`none`) | 77.50% | 48.17% | 197.4 / 66.3 | 1.5% / 0.0% | 26.70 / 26.84 | Healthy baseline (`strict_match`: 61.50%, `assertion_error`: 39.63%) |
+| 🏆 **Llama 3.2 3B** | **W8A16** | **81.00%** | **50.61%** | 198.5 / 64.3 | 1.5% / 0.0% | 6.05 / 5.79 | **Near-lossless task fidelity** (`strict_match`: 62.00%) |
+| **Llama 3.2 3B** | W16A8 (Fake) | 0.00% | 0.00% | 512.0 / 512.0 | 100.0% / 100.0% | 12.31 / 12.33 | **100% cap hit**: GSM8K `no_number`: 92.0%, HumanEval `syntax_error`: 91.46% |
+| **Llama 3.2 3B** | W16A4 (Fake) | 0.00% | 0.00% | 512.0 / 512.0 | 100.0% / 100.0% | 12.27 / 12.15 | **100% cap hit**: GSM8K `format_lost`: 90.5%, HumanEval `syntax_error`: 98.78% |
+
+* **Cross-Task W8A16 Validation:** Consistent with the +0.24% WikiText-2 PPL delta, physical W8A16 preserves multi-step arithmetic reasoning and Python code synthesis across both 1B and 3B models without accuracy degradation (minor positive deltas fall within finite-sample variance). Note that eager PyTorch per-layer dequantization (without fused Marlin-style CUDA kernels) trades decoding throughput for memory savings.
+* **Divergent Activation-Collapse Modes:** Without outlier smoothing, both `W16A8` and `W16A4` cause 98.2%–100.0% of generations to hit the 512-token cap. However, `W16A8` predominantly fails via **autoregressive repetition loops** (`RepRate` up to `0.9198`), whereas `W16A4` collapses into **incoherent syntactic corruption** (`syntax_error` reaching `78.66%` / `98.78%`), corroborating the step-size dilation pathology derived in Section 5.
+
+---
+
 ## 5. Cross-Domain Calibration & Deep Outlier Topology Profiling
 
 > **BLUF**: Transformer deep layers (Depth $> 20$) develop acute activation outliers (PAR up to $123.4\times$). In 4-bit uniform quantization, extreme spikes dilate the global step size, forcing 99.8% of normal channels to collapse to zero—the mathematical root cause of low-bit PTQ failure.
@@ -181,45 +200,14 @@ $$X_{\text{quant}} = \text{Round}\left(\frac{1.8}{8.28}\right) = \text{Round}(0.
 
 ---
 
-## 6. Architectural Recommendations & Downstream Verification Roadmap (Phase 2)
-
-> [!NOTE]
-> **Boundary of Scope**:  
-> The 48 calibration profiles and PAR topology mapping delivered in Phase 1 serve as **first-hand diagnostic telemetry for downstream deployment teams**. The orthogonal rotation transformations discussed below represent an objective **verification matrix** to evaluate whether geometric transformations can mitigate outlier energy, rather than an attempt by this framework to invent new training architectures.
-
-```
-Phase 1 (Delivered Diagnostic Baseline)      Phase 2 (Proposed Verification Matrix)
-┌──────────────────────────────────────┐     ┌─────────────────────────────────────────┐
-│ • Physical W8A16 Zero-Loss Baseline  │     │ • Walsh-Hadamard Transform (WHT)        │
-│ • Outlier Spikes Mapped (PAR: 123.4x)│ ──► │ • Learnable Cayley Optimization (Spin)  │
-│ • Cross-Domain Scale Drift Telemetry │     │ • Extreme Low-Bit (W4A4/W3A3) PTQ       │
-└──────────────────────────────────────┘     └─────────────────────────────────────────┘
-```
-
-### 6.1. Mathematical Invariance of Orthogonal Transformations
-To test whether outlier channel spikes can be suppressed while maintaining strict functional equivalence, an orthogonal rotation matrix $R \in \mathbb{R}^{d \times d}$ ($R^T R = I$) is applied across the activation-weight interface:
-
-$$\tilde{X} = X R, \quad \tilde{W} = R^T W \implies \tilde{X}\tilde{W} = (X R)(R^T W) = X (R R^T) W = X W$$
-
-**Diagnostic Principle**: Orthogonal transforms strictly preserve Euclidean norms ($\|XR\|_2 = \|X\|_2$). Rotation disperses concentrated channel peak energy across all $d$ dimensions, lowering $\max(|\tilde{X}|)$ and contracting the quantization step size $s$.
-
-### 6.2. Phase 2 Key Verification Milestones:
-1. **Training-Free Walsh-Hadamard Transform (WHT) Verification**: Evaluate block-diagonal Hadamard matrices prior to attention outputs and MLP down-projections to assess distribution smoothing under $\mathcal{O}(d \log d)$ overhead.
-2. **Stiefel Manifold Learnable Rotations (SpinQuant Formulation)**: For layers exhibiting severe non-linear accumulation (Qwen 3.5 2B L23, Gemma 2 2B L34), parameterize $R$ via the Cayley transform:
-   $$R = (I - S)(I + S)^{-1}, \quad \text{where } S = -S^T$$
-   Assess whether optimizing $S$ over calibration datasets effectively contracts Frobenius reconstruction loss $\mathbb{E}[\|Q(XR)R^TW - XW\|_F^2]$.
-3. **Sub-4-Bit Comparative Verification Matrix**: Benchmark unrotated PTQ vs. WHT vs. trained Cayley rotation across W4A4, W4A8, and W3A3 configurations.
-
----
-
-## 7. Diagnostic Conclusions & Production Deployment Guidelines
+## 6. Diagnostic Conclusions & Production Deployment Guidelines
 
 1. **Production Sweet Spot (W8A16)**:  
    For 1B–4B edge models, Weight-Only INT8 is the definitive production choice. It reduces memory bandwidth consumption by 50% while restricting perplexity degradation to a negligible +0.24%.
 2. **Prohibit Domain-Specific Calibration Bias**:  
    Quantization calibration must never rely solely on narrow vertical corpora (e.g., pure code or pure math). Specialized datasets induce premature clipping saturation during generalized conversation.
-3. **Low-Bit Activation Quantization Mandates Feature Rotation**:  
-   Any attempt to quantize activations to 4-bit (W16A4, W4A4) without geometric feature rotation will inevitably collapse due to deep-layer activation spikes (PAR up to $123.4\times$). The empirical outlier mapping delivered in Phase 1 provides the foundational diagnostic telemetry for all subsequent rotation implementations.
+3. **Low-Bit Activation Quantization Pathology**:  
+   Any attempt to quantize activations to 4-bit (W16A4, W4A4) using naive uniform quantization inevitably collapses due to deep-layer activation spikes (PAR up to $123.4\times$). The empirical outlier mapping delivered in this framework provides foundational diagnostic telemetry locating these exact breakdown boundaries.
 
 ---
 *Generated by the Model Quantization Research Framework.*

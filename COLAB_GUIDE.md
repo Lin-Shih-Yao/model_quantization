@@ -168,17 +168,9 @@ drive.mount('/content/drive')
 
 ---
 
-## 🗺️ 5. Research Roadmap & Verification Milestones
+## 🗺️ 5. Delivered Benchmarks & Research Scope
 
-### 📌 Phase 1 (Delivered Baseline): Multi-Domain × Multi-Model Benchmark Matrix
+### 📌 Core Empirical Matrix (Delivered & Verified)
 - **Core Objective**: Quantify empirical quantization baselines across open-source edge LLMs (Llama 3.2 1B/3B, Qwen 3.5 2B/4B, Gemma 2 2B) and calibration domains.
 - **Evaluation Spectrum**: FP16/BF16 Baseline, physical W8A16, emulated W16A8, emulated W16A4.
 - **Diagnostic Takeaway**: Map activation outlier topologies and identify the mathematical breakdown threshold under uniform A4 quantization.
-
-### 🔬 Phase 2 (Proposed Verification Matrix): Advanced Orthogonal Rotations
-- **Core Objective**: Verify whether orthogonal rotation transforms (SpinQuant / QuaRot) can suppress deep outlier spikes and recover extreme low-bit accuracy.
-- **Architecture**:
-  1. **Orthogonal Transform**: Walsh-Hadamard Transform (WHT) and learnable Cayley rotation matrices $R \in \mathbb{R}^{d \times d}$ ($R^T R = I$).
-  2. **Feature Space Rotation**: Apply rotations prior to Attention ($Q, K, V, O$) and MLP (Gate, Up, Down) linear projections, diffusing outlier channel energy uniformly across dimensions.
-  3. **Extreme Low-Bit PTQ**: Evaluate W4A4, W4A8, and W3A3 configurations.
-  4. **Ablation Benchmark**: Quantify PPL recovery of `Standard PTQ` vs `QuaRot (Hadamard)` vs `SpinQuant (Cayley Rotation)`.

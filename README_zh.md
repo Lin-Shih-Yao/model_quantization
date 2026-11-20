@@ -11,7 +11,7 @@
 - **橫向基準對齊**：建立主流端側模型（Llama 3.2 1B/3B, Qwen 3.5 2B/4B, Gemma 2 2B）在標準 2048 窗口下之 BF16 官方黃金困惑度基準。
 - **實體模組替換 (Physical PTQ)**：實測 W8A16（INT8 權重替換，Llama-1B 損耗僅 0.24%）與 W8A8 模組。
 - **跨領域校準泛化矩陣**：以五模組解耦管線遍歷 4 大語料領域（WikiText-2, C4, GSM8K, HumanEval）共 48 組校準資料集採集。
-- **激活離群尖刺診斷**：逐層量測神經網路通道極值與峰均比（PAR），精確定位導致極限低位元（A4）崩潰之深層異常通道（如 Qwen Layer 23 與 Gemma Layer 34），為後續正交旋轉量化研究提供實證依據。
+- **激活離群尖刺診斷**：逐層量測神經網路通道極值與峰均比（PAR），精確定位導致極限低位元（A4）崩潰之深層異常通道（如 Qwen Layer 23 與 Gemma Layer 34）。
 
 ---
 
@@ -46,10 +46,14 @@ model_quantization/
 │   ├── data/                  # 數據模組 (多領域校準資料抽取與切片)
 │   │   ├── __init__.py
 │   │   └── loader.py          # 模組 1: 多領域校準資料載入器 (WikiText2, C4, HumanEval, GSM8K)
-│   ├── eval/                  # 評估 Pipeline (PPL 計算, Profiler, 成績單寫入)
+│   ├── eval/                  # 評估 Pipeline (PPL 計算, 下游任務, Profiler, 成績單寫入)
 │   │   ├── __init__.py
 │   │   ├── ppl.py             # 模組 4: 官方標準滑動窗口 PPL 核心評估與 CSV 成績單日誌
-│   │   └── profile_matrix.py  # 激活特徵矩陣與離群尖刺診斷分析
+│   │   ├── downstream.py      # 下游生成任務評估引擎與 --score_only 離線重算工具
+│   │   ├── profile_matrix.py  # 激活特徵矩陣與離群尖刺診斷分析
+│   │   └── tasks/             # 下游任務評分與失敗病理分類模組
+│   │       ├── gsm8k.py       # GSM8K 數學推理計分與格式遺失/無數字分類
+│   │       └── humaneval.py   # HumanEval 沙盒執行與語法/斷言/執行期錯誤分類
 │   └── quantization/          # 量化核心演算法模組庫
 │       ├── __init__.py
 │       ├── calibration.py     # 模組 2: 統一離線激活值校準與 Scale 運算 (支援 PT 與 JSON 匯出)
@@ -64,6 +68,7 @@ model_quantization/
 ├── scripts/                   # 專案級自動化管線與 CLI 工具
 │   ├── run_pipeline.py        # 模組 5: 五模組自動化矩陣量化評估主控制器 (支援 Dry Run)
 │   ├── run_calibration.py    # 獨立離線校準與 Scale 導出 CLI
+│   ├── analyze_inference_data.py  # 推論資料分析：下游任務跨模型失敗病理彙整與視覺化畫圖工具
 │   ├── demo_inference.py      # 純文字輕量化推論測試腳本
 │   └── download_model.py      # 模型權重下載工具 (支援單一、自訂清單與 --all 批次下載)
 └── tests/                     # 單元測試庫 (驗證量化數值誤差與正交性)
@@ -180,6 +185,17 @@ python tests/test_w8a8.py
   - 支援完整 2048 官方標準窗口與全量 578 步 WikiText-2 PPL 評估。
   - 支援自動掛載 Google Drive，斷線不遺失評估成績單。
 
+### 8. 下游任務離線重算與失敗病理視覺化（免 GPU）
+將 Colab 產出的 `results/raw/*.jsonl` 下載回本機後，可直接執行細部計分、失敗型態分類與畫圖：
+
+```bash
+# 1. 重算所有任務分數並輸出 results/summary_rescored.csv
+python -m src.eval.downstream --score_only
+
+# 2. 產出跨模型失敗病理彙整表 (results/downstream_analysis.csv) 與視覺化圖表 (results/figures/)
+python scripts/analyze_inference_data.py
+```
+
 ---
 
 ## 📊 本地基準推論效能 (MacBook Air M3, 16GB RAM)
@@ -242,8 +258,8 @@ python -m src.eval.ppl --model_id ./models/Qwen_Qwen3.5-2B --dataset wikitext-2-
   - **深層出現極端尖刺**：在 **Layer 23** 捕捉到特定 4 個通道的激活值暴衝至 **`40.50`（高達均值的 18.2 倍！）**。
 * **Gemma 2 2B 實測診斷發現**：
   - 在 **Layer 34** 捕捉到激活值峰值達 **`58.00`**，峰均比（PAR）更達到驚人的 **`123.4 倍`**！
-* **💡 研究結論（Why SpinQuant?）**：
-  - 這客觀驗證了未量化大模型深層天生具備「少數離群通道」的病理特徵。若直接使用陽春 Uniform 量化會造成災難性截斷；因此後續實作 **SpinQuant（正交隨機旋轉）** 將離群能量平滑分散是保持低位元精度的關鍵！
+* **💡 研究結論（Why Low-Bit Collapses?）**：
+  - 這客觀驗證了未量化大模型深層天生具備「少數離群通道」的病理特徵。若直接使用陽春 Uniform 量化會造成災難性截斷；揭露了極限低位元（A4）精度塌陷的底層成因。
 
 ```bash
 # 執行激活矩陣體檢
@@ -267,6 +283,26 @@ python -m src.eval.profile_matrix --model_id ./models/Qwen_Qwen3.5-2B --num_toke
 >   ```bash
 >   python -m src.eval.ppl --model_id meta-llama/Llama-3.2-1B-Instruct --quant_method w8a16
 >   ```
+
+#### 下游實戰任務與失敗病理分析 (GSM8K & HumanEval, Llama 3.2 1B / 3B)
+針對 **GSM8K**（數學推理，抽樣 200 題，`flexible_extract`）與 **HumanEval**（Python 程式生成，全量 164 題，`pass@1`）在生成上限 `max_new_tokens=512` 下的實測對比：
+
+| 模型型號 | 量化配置 | GSM8K 準確率 | HumanEval Pass@1 | 平均生成長度 (GSM8K / HumanEval) | 主要失敗病理特徵 |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Llama 3.2 1B** | BF16 (`none`) | 33.50% | 24.39% | 186.3 / 54.2 | 正常基準（`format_lost`: 62.5%, `assertion_error`: 58.5%） |
+| 🏆 **Llama 3.2 1B** | **W8A16** | **38.50%** | **23.78%** | 191.0 / 53.4 | **實戰推理與寫碼能力近乎完整保留** |
+| **Llama 3.2 1B** | W16A8 (Fake) | 0.00% | 0.00% | 505.6 / 503.8 | 嚴重重複鬼打牆（GSM8K `RepRate`: 0.9198，98%+ 撞到 512 長度上限） |
+| **Llama 3.2 1B** | W16A4 (Fake) | 1.50% | 0.00% | 509.5 / 508.9 | 語法與結構崩潰（HumanEval `syntax_error`: 78.66%；`format_lost`: 71.0%） |
+| **Llama 3.2 3B** | BF16 (`none`) | 77.50% | 48.17% | 197.4 / 66.3 | 正常基準（`strict_match`: 61.50%, `assertion_error`: 39.63%） |
+| 🏆 **Llama 3.2 3B** | **W8A16** | **81.00%** | **50.61%** | 198.5 / 64.3 | **數學與程式能力全面保全**（`strict_match`: 62.00%） |
+| **Llama 3.2 3B** | W16A8 (Fake) | 0.00% | 0.00% | 512.0 / 512.0 | 100% 撞上限；GSM8K `no_number`: 92.0%，HumanEval `syntax_error`: 91.46% |
+| **Llama 3.2 3B** | W16A4 (Fake) | 0.00% | 0.00% | 512.0 / 512.0 | 100% 撞上限；GSM8K `format_lost`: 90.5%，HumanEval `syntax_error`: 98.78% |
+
+* **W8A16 實戰定論**：Weight-Only INT8 在 1B 與 3B 模型上的數學推理與程式生成皆未出現精度衰退，完全驗證其作為端側部署首選的可靠性。
+* **A8 vs A4 不同崩潰路徑**：未經離群平滑的 `W16A8` 與 `W16A4` 皆會在下游生成任務全面失守（98%～100% 撞滿 512 tokens 上限），但 `W16A8` 偏向**重複迴圈退化**（`RepRate` 最高達 `0.9198`），而 `W16A4` 則直接演變為**語法與格式徹底崩壞**（`syntax_error` 高達 `98.78%`）。
+
+![Downstream Accuracy Degradation](results/figures/downstream_accuracy_degradation.png)
+![Downstream Failure Modes](results/figures/downstream_failure_modes.png)
 
 ---
 

@@ -19,9 +19,7 @@ An end-to-end empirical research and evaluation framework for **Large Language M
 2. **Cross-Domain Calibration Generalization:**  
    Evaluate how diverse calibration distributions (**WikiText-2**, **C4**, **GSM8K**, **HumanEval**) impact cross-domain linguistic perplexity.
 3. **Activation Outlier Localization:**  
-   Trace and quantify activation channel spikes and peak-to-average ratios (PAR) across transformer layers.
-4. **Diagnostic Evidence for Rotation Techniques:**  
-   Quantify numerical degradation under naive uniform quantization to theoretically motivate and guide future rotation-based methods (e.g., QuaRot, SpinQuant).
+   Trace and quantify activation channel spikes and peak-to-average ratios (PAR) across transformer layers to identify breakdown thresholds under extreme low bits (A4).
 
 ---
 
@@ -74,6 +72,27 @@ Evaluated on the full official **WikiText-2 Test Set** (Context length: 2048, St
 
 > 💡 **W8A16 Milestone:** Replacing 112 projection matrices with INT8 linear layers produces textbook-grade compression: **0.24% perplexity delta with 50% memory savings**.
 
+### Downstream Task Evaluation & Failure Mode Analysis (Llama 3.2 1B / 3B)
+
+Evaluated on **GSM8K** (200 sampled test problems, `flexible_extract`) and **HumanEval** (all 164 test problems, `pass@1`) under a 512-token generation cap (`max_new_tokens=512`):
+
+| Model | Precision | GSM8K Accuracy | HumanEval Pass@1 | Avg Output Tokens (GSM8K / HumanEval) | Dominant Failure Pathology |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Llama 3.2 1B** | BF16 (`none`) | 33.50% | 24.39% | 186.3 / 54.2 | Healthy baseline (`format_lost`: 62.5%, `assertion_error`: 58.5%) |
+| 🏆 **Llama 3.2 1B** | **W8A16** | **38.50%** | **23.78%** | 191.0 / 53.4 | **Near-lossless reasoning preservation** |
+| **Llama 3.2 1B** | W16A8 (Fake) | 0.00% | 0.00% | 505.6 / 503.8 | Severe token repetition (`RepRate`: 0.9198 on GSM8K; hits 512-token cap 98%+) |
+| **Llama 3.2 1B** | W16A4 (Fake) | 1.50% | 0.00% | 509.5 / 508.9 | Incoherent generation (`syntax_error`: 78.66% on HumanEval; `format_lost`: 71.0%) |
+| **Llama 3.2 3B** | BF16 (`none`) | 77.50% | 48.17% | 197.4 / 66.3 | Healthy baseline (`strict_match`: 61.50%, `assertion_error`: 39.63%) |
+| 🏆 **Llama 3.2 3B** | **W8A16** | **81.00%** | **50.61%** | 198.5 / 64.3 | **Reasoning & coding fully preserved** (`strict_match`: 62.00%) |
+| **Llama 3.2 3B** | W16A8 (Fake) | 0.00% | 0.00% | 512.0 / 512.0 | 100% cap hit; `no_number`: 92.0% (GSM8K), `syntax_error`: 91.46% (HumanEval) |
+| **Llama 3.2 3B** | W16A4 (Fake) | 0.00% | 0.00% | 512.0 / 512.0 | 100% cap hit; `format_lost`: 90.5% (GSM8K), `syntax_error`: 98.78% (HumanEval) |
+
+* **W8A16 Robustness:** Weight-only INT8 preserves both multi-step arithmetic reasoning and Python code synthesis across 1B and 3B models without degradation.
+* **Divergent Activation-Collapse Modes:** While both naive `W16A8` and `W16A4` collapse to ~0% accuracy and hit the 512-token cap (`98.2%–100.0%`), `W16A8` fails primarily via **autoregressive repetition loops** (`RepRate` up to `0.9198`), whereas `W16A4` fails via **syntactic/structural breakdown** (`syntax_error` up to `98.78%`).
+
+![Downstream Accuracy Degradation](results/figures/downstream_accuracy_degradation.png)
+![Downstream Failure Modes](results/figures/downstream_failure_modes.png)
+
 ---
 
 ## 🔍 Activation Outlier Profiling
@@ -82,7 +101,7 @@ Through forward-hook activation profiling, we mapped internal activation spikes 
 * **Qwen 3.5 2B (Layer 23):** Isolated channels surge to **`40.50`** (18.2× the layer mean).
 * **Gemma 2 2B (Layer 34):** Peak activations reach **`58.00`** with a **`123.4×` Peak-to-Average Ratio**.
 
-These empirical findings illustrate why standard uniform quantization suffers catastrophic collapse under 4-bit activations (A4) due to step-size dilation, providing the diagnostic foundation for future research into orthogonal feature rotations.
+These empirical findings illustrate why standard uniform quantization suffers catastrophic collapse under 4-bit activations (A4) due to step-size dilation, providing key diagnostic telemetry on low-bit failure modes.
 
 ---
 
@@ -135,6 +154,15 @@ python tests/test_w8a16.py
 python tests/test_w8a8.py
 ```
 
+### 6. Re-score & Analyze Downstream Results (CPU-Only)
+```bash
+# Re-score saved results/raw/*.jsonl predictions to results/summary_rescored.csv
+python -m src.eval.downstream --score_only
+
+# Generate failure-mode breakdown CSV (results/downstream_analysis.csv) and plots (results/figures/)
+python scripts/analyze_inference_data.py
+```
+
 ---
 
 ## 📁 Repository Structure
@@ -158,13 +186,18 @@ model_quantization/
 │   │   └── w8a8.py            # Physical INT8 weight & activation layer
 │   ├── eval/
 │   │   ├── ppl.py             # Module 4: Standard sliding-window perplexity evaluator
-│   │   └── profile_matrix.py  # Activation outlier and spike diagnostics
+│   │   ├── downstream.py      # Downstream task evaluation & --score_only re-scoring engine
+│   │   ├── profile_matrix.py  # Activation outlier and spike diagnostics
+│   │   └── tasks/
+│   │       ├── gsm8k.py       # GSM8K scoring & math failure-mode taxonomy
+│   │       └── humaneval.py   # HumanEval sandboxed execution & error taxonomy
 │   └── models/
 │       ├── loader.py          # Device-adaptive causal model and tokenizer loader
 │       └── inference.py       # Pure-text inference engine
 ├── scripts/
 │   ├── run_pipeline.py        # Module 5: Automated matrix orchestration controller
 │   ├── run_calibration.py    # Standalone calibration CLI
+│   ├── analyze_inference_data.py  # Cross-model inference data analyzer & figure generator
 │   └── download_model.py      # Unified model weight downloader
 └── tests/                     # Unit test suites (Calibration, Fake Quant, W8A16, W8A8)
 ```

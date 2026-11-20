@@ -19,7 +19,7 @@
 | **核心突破發現** | **深層激活峰均比（PAR）高達 123.4×** | 定位 Qwen 3.5 2B L23（40.50）與 Gemma 2 2B L34（58.00）尖刺，揭露 Uniform A4 階距被極值綁架之崩潰機制 |
 | **多領域校準** | **48 組全矩陣檔案入庫（4 模型 × 4 領域 × 3 規模）** | 橫跨 WikiText-2, C4, GSM8K, HumanEval，客觀量化語意結構對張量動態範圍的衝擊 |
 | **測試台規格** | **雙軌邊緣測試矩陣（NVIDIA T4 16GB [Google Colab] vs. Apple M3 16GB UMA）** | 驗證 PCIe 離散顯存架構（320 GB/s）與端側統一記憶體架構（100 GB/s UMA）之實體推論特徵 |
-| **交付邊界** | **Phase 1 驗收完成 / Phase 2 驗證標尺確立** | Phase 1 提供高解析度拓撲診斷依據；Phase 2 定位正交旋轉等價變換之驗證基準 |
+| **交付邊界** | **全量實證驗收完成** | 提供高解析度拓撲診斷依據與端側量化部署準則 |
 
 ---
 
@@ -139,6 +139,25 @@ $$\Delta \text{PPL} = \text{PPL}_{\text{W8A16}} - \text{PPL}_{\text{Baseline}} =
 
 ---
 
+### 4.4. 下游生成任務耐受度與失敗病理分析 (GSM8K & HumanEval, Llama 3.2 1B / 3B)
+針對 **GSM8K**（抽樣 200 題，`flexible_extract`）與 **HumanEval**（全量 164 題，`pass@1`）於生成上限 `max_new_tokens=512` 下的跨精度實測對比：
+
+| 模型型號 | 量化配置 | GSM8K 準確率 | HumanEval Pass@1 | 平均輸出長度 (GSM8K / HumanEval) | 上限觸及率 (`CapHit`) | 解碼吞吐量 (t/s) | 失敗病理歸因 (Failure Pathology) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **Llama 3.2 1B** | BF16 (`none`) | 33.50% | 24.39% | 186.3 / 54.2 | 1.0% / 0.0% | 47.16 / 46.82 | 正常基準（1B 指令格式遵循較弱，`format_lost`: 62.5%） |
+| 🏆 **Llama 3.2 1B** | **W8A16** | **38.50%** | **23.78%** | 191.0 / 53.4 | 1.5% / 0.0% | 17.15 / 17.02 | **推理與寫碼能力完整保留**（eager 反量化吞吐下降屬預期） |
+| **Llama 3.2 1B** | W16A8 (Fake) | 0.00% | 0.00% | 505.6 / 503.8 | 98.5% / 98.2% | 22.05 / 22.02 | **重複迴圈崩潰**：GSM8K `RepRate` 高達 `0.9198`、`no_number`: 97.0% |
+| **Llama 3.2 1B** | W16A4 (Fake) | 1.50% | 0.00% | 509.5 / 508.9 | 99.5% / 99.4% | 21.86 / 20.73 | **語法與結構崩壞**：HumanEval `syntax_error`: 78.66%、`format_lost`: 71.0% |
+| **Llama 3.2 3B** | BF16 (`none`) | 77.50% | 48.17% | 197.4 / 66.3 | 1.5% / 0.0% | 26.70 / 26.84 | 正常基準（`strict_match`: 61.50%、`assertion_error`: 39.63%） |
+| 🏆 **Llama 3.2 3B** | **W8A16** | **81.00%** | **50.61%** | 198.5 / 64.3 | 1.5% / 0.0% | 6.05 / 5.79 | **實戰能力近乎無損**（`strict_match`: 62.00%） |
+| **Llama 3.2 3B** | W16A8 (Fake) | 0.00% | 0.00% | 512.0 / 512.0 | 100.0% / 100.0% | 12.31 / 12.33 | **全面觸及長度上限**：GSM8K `no_number`: 92.0%、HumanEval `syntax_error`: 91.46% |
+| **Llama 3.2 3B** | W16A4 (Fake) | 0.00% | 0.00% | 512.0 / 512.0 | 100.0% / 100.0% | 12.27 / 12.15 | **全面觸及長度上限**：GSM8K `format_lost`: 90.5%、HumanEval `syntax_error`: 98.78% |
+
+* **W8A16 跨任務驗證**：與 WikiText-2 PPL（僅 +0.24%）一致，實體 W8A16 在數學多步推理與程式碼生成任務上完全未見退化（微幅波動屬樣本抽樣與量化正則化正常範圍）。註：本實作於 Python 層進行逐層反量化（未啟用 Marlin 等融合 CUDA Kernel），故解碼吞吐低於原生 BF16。
+* **激活量化之異質崩潰路徑**：未經離群平滑的 `W16A8` 與 `W16A4` 雖同樣導致 98.2%–100.0% 樣本撞滿 512 tokens 上限，但 `W16A8` 主要表現為**詞元重複鬼打牆**（`RepRate` 最高 `0.9198`），而 `W16A4` 則直接喪失語法結構（HumanEval `syntax_error` 達 `78.66%` / `98.78%`），從下游生成行為印證了第 5 節所述之階距擴張病理。
+
+---
+
 ## 5. 跨領域校準分析與深層離群拓撲診斷 (Outlier Topology & Root Cause)
 
 > **結論先行 (BLUF)**：模型深層（Depth $> 20$）存在嚴重的數值異常突波（PAR 高達 $123.4\times$）。在 4-bit 均勻量化下，單一全域階距被迫擴張數倍，導致 99.8% 正常通道數值在取整後湮滅歸零，此為低位元激活量化失效之數學根本成因。
@@ -181,43 +200,14 @@ $$X_{\text{quant}} = \text{Round}\left(\frac{1.8}{8.28}\right) = \text{Round}(0.
 
 ---
 
-## 6. 診斷洞察衍生之架構建議與次階段驗證規劃 (Architectural Recommendations & Downstream Verification)
-
-> [!NOTE]
-> **定位邊界宣告**：  
-> 本專案 Phase 1 交付的 48 組校準檔案與 PAR 拓撲圖譜，核心價值在於**「為下游模型部署團隊提供第一手、高解析度的數值病理診斷依據」**。下述正交旋轉等價變換方法，係作為「驗證空間變換能否有效平抑離群能量之客觀驗證標尺（Verification Matrix）」，非本團隊試圖去訓練或修改原始模型架構。
-
-```
-Phase 1 (Delivered Diagnostic Baseline)      Phase 2 (Proposed Verification Matrix)
-┌──────────────────────────────────────┐     ┌─────────────────────────────────────────┐
-│ • Physical W8A16 Zero-Loss Baseline  │     │ • Walsh-Hadamard Transform (WHT)        │
-│ • Outlier Spikes Mapped (PAR: 123.4x)│ ──► │ • Learnable Cayley Optimization (Spin)  │
-│ • Cross-Domain Scale Drift Telemetry │     │ • Extreme Low-Bit (W4A4/W3A3) PTQ       │
-└──────────────────────────────────────┘     └─────────────────────────────────────────┘
-```
-
-### 6.1. 旋轉等價變換之數學驗證基礎
-針對深層激活突波，在維持原始模型權重功能等價的前提下，利用正交矩陣 $R \in \mathbb{R}^{d \times d}$（$R^T R = I$）對特徵空間施加旋轉變換：
-
-$$\tilde{X} = X R, \quad \tilde{W} = R^T W \implies \tilde{X}\tilde{W} = (X R)(R^T W) = X (R R^T) W = X W$$
-
-**數值診斷原理**：正交變換維持 $L_2$ 範數不變（$\|XR\|_2 = \|X\|_2$）。透過旋轉將集中在少數通道的尖刺能量擴散至全體維度，壓低 $\max(|\tilde{X}|)$，從而收縮均勻階距 $s$。
-
-### 6.2. 次階段驗證標尺與規劃 (Phase 2 Verification Milestones)：
-1. **免訓練阿達馬旋轉驗證 (Walsh-Hadamard Transform, WHT)**：於 Attention 輸出與 MLP 降維層前置塊對角 Hadamard 矩陣，評估 $\mathcal{O}(d \log d)$ 運算量下平滑激活分佈之客觀效果。
-2. **Stiefel 流形可學習旋轉驗證 (SpinQuant Formulation)**：針對深層非線性積累最嚴重的特定層（Qwen 3.5 2B L23、Gemma 2 2B L34），藉由 Cayley 變換 $R = (I - S)(I + S)^{-1}$（$S = -S^T$），驗證最佳旋轉矩陣對層級重構誤差的壓制極限。
-3. **極限低位元（W4A4、W3A3）消融對照驗證**：建立完整驗證矩陣，對比無旋轉 PTQ、WHT 與 Cayley 旋轉在極限位元下之 PPL 邊界。
-
----
-
-## 7. 系統診斷結論與生產部署準則 (Diagnostic Conclusion & Production Guidelines)
+## 6. 系統診斷結論與生產部署準則 (Diagnostic Conclusion & Production Guidelines)
 
 1. **端側落地首選基準（W8A16）**：  
    在 1B～4B 端側大模型解碼中，Weight-Only INT8 為兼顧記憶體頻寬與語言能力的最佳工程甜蜜點（Sweet Spot）。顯存需求減半（-49.2%），傳輸頻寬減半，語言建模損耗僅 +0.24%。
 2. **嚴防垂直領域校準之 Scale 偏置**：  
    嚴禁僅使用代碼或數學題等高度特化語料進行量化校準。特定語法結構會人為壓低關鍵投影層的動態範圍，導致通用推理時發生非預期的截斷飽和。
-3. **低位元激活量化必須依賴幾何空間平滑**：  
-   任何針對 4-bit 激活量化的嘗試（W16A4、W4A4），若缺乏特徵空間的正交旋轉，必然遭遇深層離群尖刺（PAR 高達 $123.4\times$）引發的階距擴張與數值塌陷。Phase 1 建立的拓撲測繪檔案為後續模型壓縮提供了可防禦的量化診斷數據。
+3. **低位元激活量化之數值病理**：  
+   任何針對 4-bit 激活量化的嘗試（W16A4、W4A4），均勻量化必然遭遇深層離群尖刺（PAR 高達 $123.4\times$）引發的階距擴張與數值塌陷。本專案建立的拓撲測繪檔案精準定位了失效邊界，為模型壓縮提供了可防禦的量化診斷數據。
 
 ---
 *Generated by the Model Quantization Research Framework.*

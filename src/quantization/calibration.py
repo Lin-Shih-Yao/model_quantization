@@ -10,7 +10,7 @@ import time
 import torch
 from tqdm import tqdm
 
-from src.data import get_calib_dataset
+from src.data import get_calibration_dataloader
 from src.quantization.observer import LayerObserver
 
 TARGET_PROJECTIONS = (
@@ -177,7 +177,13 @@ def calibrate_model(
     output_file = output_path or f"./calibration_results/calib_{clean_model_name}_{dataset_name}.pt"
 
     # 1. Prepare calibration samples
-    samples = get_calib_dataset(tokenizer, dataset_name=dataset_name, n_samples=n_samples, seq_len=seq_len)
+    samples = get_calibration_dataloader(
+        tokenizer,
+        dataset_name=dataset_name,
+        n_samples=n_samples,
+        seq_len=seq_len,
+        as_tensor=False,
+    )
 
     # 2. Probe target layers and attach observers
     target_modules = find_target_linear_modules(model)

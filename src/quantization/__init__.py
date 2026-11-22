@@ -2,7 +2,7 @@
 Quantization Core Modules (Calibration, Observers, Datasets, W8A16, W8A8, Utilities)
 """
 
-from src.data import get_calib_dataset, get_calibration_dataloader
+from src.data import get_calibration_dataloader
 from src.quantization.observer import LayerObserver
 from src.quantization.calibration import (
     calibrate_model,
@@ -26,7 +26,6 @@ from src.quantization.fake_quant import (
 )
 
 __all__ = [
-    "get_calib_dataset",
     "LayerObserver",
     "calibrate_model",
     "collect_calibration_stats",
